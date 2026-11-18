@@ -139,6 +139,35 @@ def test_realized_loss_never_promoted_via_solo_mtm() -> None:
     assert bleeder.min_ofi_pct >= 25.0
 
 
+def test_adr0014_h096_dry_powder_15s_collar_policy() -> None:
+    from sota_compounding.lifecycle import evaluate_dry_powder_15s_collar_policy
+
+    ok = evaluate_dry_powder_15s_collar_policy(
+        ofi_entry=0.30,
+        iso_f_buy_share=0.18,
+        resting_passive_bid_0_15s=False,
+        bid_survived_15s=True,
+        ask_drift_15s_bps=6.5,
+        spread_15s_bps=7.0,
+    )
+    assert ok["approved_for_paper_collar"] is True
+    assert ok["standalone_alpha_claim"] is False
+
+    passive_leak = evaluate_dry_powder_15s_collar_policy(
+        ofi_entry=0.30,
+        iso_f_buy_share=0.18,
+        resting_passive_bid_0_15s=True,
+    )
+    assert passive_leak["approved_for_paper_collar"] is False
+
+    uninformed = evaluate_dry_powder_15s_collar_policy(
+        ofi_entry=0.05,
+        iso_f_buy_share=0.0,
+        bjzz_inst_dark_share=0.0,
+    )
+    assert uninformed["approved_for_paper_collar"] is False
+
+
 def test_adr_catalog_and_offline_org_firewall_scripts() -> None:
     p_adr = subprocess.run(
         [sys.executable, str(REPO_ROOT / "scripts" / "architecture_catalog.py"), "--check"],

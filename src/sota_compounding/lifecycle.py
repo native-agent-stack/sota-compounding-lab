@@ -394,3 +394,35 @@ def export_broker_strategy_manifest(
         strategies=strat_rows,
         manifest_sha256=digest,
     )
+
+
+def evaluate_dry_powder_15s_collar_policy(
+    *,
+    ofi_entry: float,
+    iso_f_buy_share: float = 0.0,
+    bjzz_inst_dark_share: float = 0.0,
+    resting_passive_bid_0_15s: bool = False,
+    bid_survived_15s: bool = True,
+    ask_drift_15s_bps: float = 0.0,
+    spread_15s_bps: float = 5.0,
+) -> dict[str, object]:
+    """Enforce `ADR-0014` (`H096`) pure dry-powder `15s` bid-survival + informed-flow joint gate."""
+    import math
+
+    if not all(
+        math.isfinite(x) for x in (ofi_entry, iso_f_buy_share, bjzz_inst_dark_share, ask_drift_15s_bps, spread_15s_bps)
+    ):
+        raise ValueError("Non-finite inputs in evaluate_dry_powder_15s_collar_policy")
+
+    informed_flow_ok = ofi_entry >= 0.25 and (iso_f_buy_share >= 0.15 or bjzz_inst_dark_share >= 0.12)
+    dry_powder_ok = (not resting_passive_bid_0_15s) and bid_survived_15s
+    collar_ok = ask_drift_15s_bps <= 10.0 and 0.0 < spread_15s_bps <= 10.0
+    approved = informed_flow_ok and dry_powder_ok and collar_ok
+    return {
+        "approved_for_paper_collar": approved,
+        "informed_flow_ok": informed_flow_ok,
+        "dry_powder_bid_survived_15s": dry_powder_ok,
+        "collar_within_10bps": collar_ok,
+        "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+        "standalone_alpha_claim": False,
+    }

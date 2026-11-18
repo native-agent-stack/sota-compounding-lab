@@ -58,8 +58,8 @@
   "statistical_and_queue_gates": {
     "study_wall_date": "2026-10-15",
     "spec_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
-    "cumulative_trials_n": 95,
-    "hlz_t_hurdle": 4.1858,
+    "cumulative_trials_n": 96,
+    "hlz_t_hurdle": 4.1881,
     "cpcv_paths": 5,
     "cpcv_purge_sessions": 3,
     "cpcv_embargo_sessions": 2,
