@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sota-compounding-lab"
+version = "1.0.0"
+description = "Open-core 5-stage SOTA Quantitative Strategy Compounding, Sim -> Pre-Wall Backtest -> Paper -> Empirical-Bayes Fine-Tuning -> Broker Manifest Engine & Org Visibility Firewall"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "hypothesis>=6.120.0",
+  "pytest>=8.3.0",
+  "ruff>=0.9.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sota_compounding"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "scripts"]
+testpaths = ["tests"]
