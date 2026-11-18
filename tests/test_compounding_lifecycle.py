@@ -123,6 +123,21 @@ def test_realized_loss_never_promoted_via_solo_mtm() -> None:
     )
     assert losing.tuning_regime != "PROMOTED_ALPHA_LEADER"
 
+    bleeder = tune_empirical_bayes_ucb(
+        "POST_VIX_REVERSAL_MAJOR_GROWTH_THRUST",
+        closed_roundtrips=12,
+        closed_mean_r=-0.68,
+        combined_samples=12,
+        combined_expectancy_r=-0.68,
+        open_mtm_pct=0.0,
+        mean_slippage_bps=-8.0,
+        is_major_core=True,
+    )
+    assert bleeder.tuning_regime == "PROBATION_NEGATIVE_EB_THROTTLE"
+    assert bleeder.alloc_multiplier == 0.15
+    assert bleeder.ucb_priority_weight <= 0.45
+    assert bleeder.min_ofi_pct >= 25.0
+
 
 def test_adr_catalog_and_offline_org_firewall_scripts() -> None:
     p_adr = subprocess.run(

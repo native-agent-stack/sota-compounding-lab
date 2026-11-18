@@ -148,6 +148,7 @@ class EmpiricalBayesTuningResult:
     stop_atr_mult: float
     min_close_pos: float
     min_ofi_pct: float
+    alloc_multiplier: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +210,7 @@ def tune_empirical_bayes_ucb(
     stop_atr = min(1.98, max(0.50, float(base_stop_atr_mult)))
     min_cp = float(base_min_close_pos)
     min_ofi = float(base_min_ofi_pct)
+    alloc_mult = 1.0
     regime = "MAJOR_PORTFOLIO_CORE_ACTIVE" if is_major_core else "EXPLORING_ACTIVE"
 
     if n_closed >= 2 and comb_r < -0.25:
@@ -216,12 +218,20 @@ def tune_empirical_bayes_ucb(
         min_cp = round(min(0.76, min_cp + 0.10 * severity), 3)
         min_ofi = round(min(4.5, min_ofi + 4.5 * severity), 2)
         stop_atr = round(min(1.98, stop_atr + 0.10 * severity), 3)
-        damped_cap = 1.18 if is_major_core else max(0.40, round(1.0 - 0.25 * severity, 3))
-        ucb_weight = max(min_floor, min(ucb_weight, damped_cap))
-        regime = "TIGHTENED_NOISE_FILTER"
+        if n_closed >= 10 and eb_r <= -0.25 and closed_r < -0.25:
+            min_ofi = round(max(min_ofi, 25.0), 2)
+            ucb_weight = max(0.35, min(ucb_weight, 0.45))
+            alloc_mult = 0.15
+            regime = "PROBATION_NEGATIVE_EB_THROTTLE"
+        else:
+            damped_cap = 1.18 if is_major_core else max(0.40, round(1.0 - 0.25 * severity, 3))
+            ucb_weight = max(min_floor, min(ucb_weight, damped_cap))
+            alloc_mult = round(max(0.48, 0.88 - 0.50 * severity), 2)
+            regime = "TIGHTENED_NOISE_FILTER"
     elif n_comb >= 1 and comb_r >= 0.15 and (n_closed == 0 or closed_r >= 0.0):
         if slip_bps <= 0.0:
             ucb_weight = min(1.65, ucb_weight + 0.08)
+        alloc_mult = round(min(1.42, 1.15 + 0.45 * max(0.0, comb_r)), 2)
         regime = "PROMOTED_ALPHA_LEADER"
 
     return EmpiricalBayesTuningResult(
@@ -232,6 +242,7 @@ def tune_empirical_bayes_ucb(
         stop_atr_mult=round(min(1.98, stop_atr), 3),
         min_close_pos=round(min_cp, 3),
         min_ofi_pct=round(min_ofi, 2),
+        alloc_multiplier=alloc_mult,
     )
 
 
