@@ -36,15 +36,24 @@ from sota_compounding.strategy_template import (
     scaffold_converged_strategy,
     validate_converged_strategy_template,
 )
+from sota_compounding.symbol_ranking_v310 import (
+    CANONICAL_12_RANKING_FEEDS,
+    DF10_TO_DF12_FEEDS,
+    SYMBOL_RANKING_V310_SCHEMA,
+    evaluate_df12_bitemporal_symbol_ranking_handoff,
+)
 
 __all__ = [
     "ADR0022_MAX_STOP_PCT",
     "ALPACA_PAPER_MAX_RPM",
     "ARCHETYPES",
+    "CANONICAL_12_RANKING_FEEDS",
     "CANONICAL_7_PIT_FEEDS",
+    "DF10_TO_DF12_FEEDS",
     "IBKR_PAPER_MAX_MSG_PER_MIN",
     "RANKING_AND_DATAFEEDS_SCHEMA",
     "STUDY_WALL_DATE",
+    "SYMBOL_RANKING_V310_SCHEMA",
     "BrokerStrategyManifest",
     "EmpiricalBayesTuningResult",
     "FirstHandIncentiveScore",
@@ -58,6 +67,7 @@ __all__ = [
     "classify_execution_quality_tier",
     "compute_sota_mover_ranking",
     "convert_sip_round_lots_to_shares",
+    "evaluate_df12_bitemporal_symbol_ranking_handoff",
     "evaluate_first_hand_incentive",
     "evaluate_full_lifecycle",
     "evaluate_stockbee_momentum_burst",
