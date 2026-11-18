@@ -168,6 +168,29 @@ def test_adr0014_h096_dry_powder_15s_collar_policy() -> None:
     assert uninformed["approved_for_paper_collar"] is False
 
 
+def test_adr0015_abnormal_rvol_tod_and_wave2_reentry_policy() -> None:
+    from sota_compounding.lifecycle import evaluate_abnormal_rvol_tod_and_wave2_reentry_policy
+
+    bias = evaluate_abnormal_rvol_tod_and_wave2_reentry_policy(
+        stage1_rvol_tod=1.01,
+        ofi_entry=0.35,
+    )
+    assert bias["megacap_normal_rate_purged"] is True
+    assert bias["approved_wave1_early_ignition"] is False
+
+    w2 = evaluate_abnormal_rvol_tod_and_wave2_reentry_policy(
+        stage1_rvol_tod=2.45,
+        ofi_entry=0.32,
+        core_harvest_completed=True,
+        pullback_held_zero_loss_floor=True,
+        stop_pct=1.75,
+        collar_spread_bps=7.2,
+    )
+    assert w2["approved_wave1_early_ignition"] is True
+    assert w2["approved_wave2_post_harvest_reentry"] is True
+    assert w2["standalone_alpha_claim"] is False
+
+
 def test_adr_catalog_and_offline_org_firewall_scripts() -> None:
     p_adr = subprocess.run(
         [sys.executable, str(REPO_ROOT / "scripts" / "architecture_catalog.py"), "--check"],

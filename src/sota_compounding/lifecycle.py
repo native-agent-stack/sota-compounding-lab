@@ -426,3 +426,44 @@ def evaluate_dry_powder_15s_collar_policy(
         "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
         "standalone_alpha_claim": False,
     }
+
+
+def evaluate_abnormal_rvol_tod_and_wave2_reentry_policy(
+    *,
+    stage1_rvol_tod: float,
+    ofi_entry: float,
+    core_harvest_completed: bool = False,
+    pullback_held_zero_loss_floor: bool = False,
+    stop_pct: float = 1.60,
+    collar_spread_bps: float = 6.0,
+) -> dict[str, object]:
+    """Enforce `ADR-0015` abnormal `RVOL-TOD` size-bias purge & Wave-2 post-harvest re-entry."""
+    import math
+
+    if any(
+        isinstance(x, bool) or not math.isfinite(float(x))
+        for x in (stage1_rvol_tod, ofi_entry, stop_pct, collar_spread_bps)
+    ):
+        raise ValueError("Non-finite inputs in evaluate_abnormal_rvol_tod_and_wave2_reentry_policy")
+    if stage1_rvol_tod < 0.0 or not (0.0 < stop_pct <= ADR0022_MAX_STOP_PCT) or collar_spread_bps <= 0.0:
+        raise ValueError("Invalid stage1_rvol_tod, stop_pct (ADR-0022 <= 2.00%), or collar_spread_bps")
+
+    rvol_ok = float(stage1_rvol_tod) >= 2.20
+    flow_ok = float(ofi_entry) >= 0.25
+    collar_ok = float(collar_spread_bps) <= 10.0
+    wave1_ok = rvol_ok and flow_ok and collar_ok
+    wave2_ok = (
+        bool(core_harvest_completed)
+        and bool(pullback_held_zero_loss_floor)
+        and float(stage1_rvol_tod) >= 1.65
+        and flow_ok
+        and collar_ok
+    )
+    return {
+        "megacap_normal_rate_purged": float(stage1_rvol_tod) < 1.65,
+        "approved_wave1_early_ignition": wave1_ok,
+        "approved_wave2_post_harvest_reentry": wave2_ok,
+        "adr0022_compliant": True,
+        "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+        "standalone_alpha_claim": False,
+    }
