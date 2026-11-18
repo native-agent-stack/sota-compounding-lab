@@ -312,7 +312,7 @@ def scaffold_converged_strategy(
         raise ValueError(f"Unsupported archetype {archetype!r}; expected one of {ARCHETYPES}")
 
     preset = dict(_ARCHETYPE_DEFAULTS[archetype])
-    default_stop = float(preset.get("default_initial_stop_pct", 1.80))
+    default_stop = float(str(preset.get("default_initial_stop_pct", 1.80)))
 
     payload: dict[str, Any] = {
         "schema_version": "1.0.0",
