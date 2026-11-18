@@ -1,0 +1,14 @@
+# Orca (https://github.com/stablyai/orca) dual-machine workspace recipe for sota-compounding-lab
+# Supports portable Apple M5 Max (macOS) and paired stationary Noesis (Windows + WSL2 Noesis-Carbon).
+scripts:
+  setup: |
+    uv sync --locked
+setupAgentStartupPolicy: wait-for-setup
+defaultTabs:
+  - title: Agent
+  - title: 5-Stage Lifecycle & Templates
+    command: uv run python scripts/architecture_catalog.py --check
+  - title: Org Visibility Doctor
+    command: uv run python scripts/org_visibility_doctor.py --offline
+  - title: Pytest
+    command: uv run pytest -q
