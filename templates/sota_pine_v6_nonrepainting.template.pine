@@ -1,0 +1,66 @@
+//@version=6
+strategy(
+    title="SOTA Research-Converged Non-Repainting Template (ADR-0022 <= 2.00%)",
+    shorttitle="SOTA_RC_v6",
+    overlay=true,
+    calc_on_every_tick=false,
+    process_orders_on_close=true,
+    initial_capital=100000,
+    default_qty_type=strategy.cash,
+    default_qty_value=5000,
+    commission_type=strategy.commission.percent,
+    commission_value=0.02,
+    slippage=2
+)
+
+// --- 1. Governance & ADR-0022 Risk Inputs ---
+strategyId = input.string("H08_FIRST_HAND_CATALYST_IGNITION_TEMPLATE", "Strategy ID")
+webhookEndpoint = input.string("http://127.0.0.1:8799/api/tv-webhook", "Local Paper Relay Endpoint (:8799/api/tv-webhook)")
+requestedStopPct = input.float(1.60, "Requested Initial Stop (%)", minval=0.10, maxval=2.00, step=0.05)
+riskUsd = input.float(200.0, "Per-Trade Paper Risk (USD)", minval=10.0, maxval=2000.0, step=10.0)
+maxNotionalUsd = input.float(20000.0, "Max Paper Notional (USD)", minval=500.0, maxval=100000.0, step=500.0)
+minRvolMult = input.float(2.20, "Minimum Relative Volume (x)", minval=1.00, step=0.10)
+breakoutLookback = input.int(20, "Prior Closed-Bar High Lookback", minval=5, maxval=120)
+
+// Hard clamp to ADR-0022 <= 2.00% maximum initial stop distance
+ADR0022_MAX_STOP_PCT = 2.00
+effectiveStopPct = math.min(requestedStopPct, ADR0022_MAX_STOP_PCT)
+
+// --- 2. Strictly Causal, Same-Timeframe Indicators (Zero Lookahead / Zero Repainting) ---
+sessionVwap = ta.vwap(hlc3)
+volBaseline = ta.sma(volume[1], 20)
+rvolMult = na(volBaseline) or volBaseline <= 0.0 ? 0.0 : volume / volBaseline
+priorPivotHigh = ta.highest(high[1], breakoutLookback)
+closePosInRange = high > low ? (close - low) / (high - low) : 0.0
+
+// --- 3. Closed-Bar Confirmed Entry Condition (barstate.isconfirmed Required) ---
+rawBreakout = close > priorPivotHigh and close > sessionVwap and rvolMult >= minRvolMult and closePosInRange >= 0.65
+confirmedLongSignal = barstate.isconfirmed and rawBreakout and strategy.position_size == 0
+
+// Conservative inward Reg NMS tick quantization so realized stop distance <= ADR-0022 (2.00%)
+tickSize = math.max(syminfo.mintick, 0.0001)
+rawStopPx = close * (1.0 - effectiveStopPct / 100.0)
+quantizedStopPx = math.ceil(rawStopPx / tickSize) * tickSize
+safeStopPx = quantizedStopPx >= close ? close - tickSize : quantizedStopPx
+realizedStopPct = close > 0.0 ? ((close - safeStopPx) / close) * 100.0 : 0.0
+adr0022Compliant = realizedStopPct > 0.0 and realizedStopPct <= ADR0022_MAX_STOP_PCT
+
+// --- 4. Paper Order Execution & Closed-Bar :8799/api/tv-webhook JSON Alert ---
+if confirmedLongSignal and adr0022Compliant
+    strategy.entry("LONG", strategy.long)
+    strategy.exit("STOP_ADR0022", from_entry="LONG", stop=safeStopPx)
+    webhookPayload = str.format(
+        "'{'\"endpoint\":\"{0}\",\"strategy_id\":\"{1}\",\"symbol\":\"{2}\",\"side\":\"buy\",\"risk_usd\":{3,number,#.##},\"max_notional_usd\":{4,number,#.##},\"entry_px\":{5,number,#.####},\"stop_px\":{6,number,#.####},\"stop_pct\":{7,number,#.####},\"bar_confirmed\":true'}'",
+        webhookEndpoint,
+        strategyId,
+        syminfo.ticker,
+        riskUsd,
+        maxNotionalUsd,
+        close,
+        safeStopPx,
+        realizedStopPct
+    )
+    alert(webhookPayload, alert.freq_once_per_bar_close)
+
+plot(sessionVwap, title="Session VWAP", color=color.new(color.aqua, 0), linewidth=2)
+plot(strategy.position_size > 0 ? safeStopPx : na, title="ADR-0022 Stop", color=color.new(color.red, 0), style=plot.style_linebr)

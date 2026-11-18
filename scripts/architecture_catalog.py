@@ -31,8 +31,8 @@ def verify_adr_catalog_and_privacy(root: Path = ROOT) -> list[str]:
 
     cat_txt = CATALOG_MD.read_text(encoding="utf-8")
     adrs = sorted(p for p in ADR_DIR.glob("ADR-[0-9][0-9][0-9][0-9]-*.md"))
-    if len(adrs) < 5:
-        errors.append(f"Expected >=5 ADR files, found {len(adrs)}")
+    if len(adrs) < 6:
+        errors.append(f"Expected >=6 ADR files, found {len(adrs)}")
 
     for adr in adrs:
         if f"({adr.name})" not in cat_txt:
@@ -84,7 +84,8 @@ def main() -> int:
         for e in errs:
             print(f"[ADR-GATE FAIL] {e}", file=sys.stderr)
         return 1
-    print("[ADR-GATE PASS] 5/5 MADR ADRs, 40-char SHA-pinned CI actions, and zero-leak privacy verified.")
+    count = len(sorted(ADR_DIR.glob("ADR-[0-9][0-9][0-9][0-9]-*.md")))
+    print(f"[ADR-GATE PASS] {count}/{count} MADR ADRs, 40-char SHA-pinned CI actions, and zero-leak privacy verified.")
     return 0
 
 

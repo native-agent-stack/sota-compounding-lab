@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0.0",
+  "strategy_id": "H08_FIRST_HAND_CATALYST_IGNITION_TEMPLATE",
+  "archetype": "FIRST_HAND_SEC_EPISODIC_PIVOT",
+  "archetype_profile": {
+    "signal_family": "sec_edgar_8k_day1_episodic_pivot",
+    "primary_forms": [
+      "8-K",
+      "SC 13D"
+    ],
+    "max_spread_bps": 35.0,
+    "default_initial_stop_pct": 1.9
+  },
+  "research_convergence": {
+    "input_package_sha256": "0000000000000000000000000000000000000000000000000000000000000001",
+    "pinned_upstream_commits": {
+      "alpaca-py": "c42add7c0a7026e2ead3ed64e76f4def2b99fda4",
+      "edgartools": "574c2bd15f6c629bceef03b6550ea8ac8abf3473",
+      "hftbacktest": "5f3ec40b2afb764e0fea112f941ed85523ef4e88",
+      "nautilus_trader": "da6b57aefdd62b44f675e434ffcfefca7f4025dd",
+      "skfolio": "90e3fb907fab39d244d899f3caf4e9676889309c"
+    },
+    "reproducible_command": "uv run pytest -q && python -m sota_compounding --strategy H08_FIRST_HAND_CATALYST_IGNITION_TEMPLATE",
+    "evidence_grade": "E3",
+    "other_repos_authority": "PHILOSOPHY_ONLY"
+  },
+  "datafeed_pit_contract": {
+    "feeds_enabled": [
+      "alpaca_sip_equities",
+      "alpaca_boats_overnight",
+      "ibkr_outside_rth_4002",
+      "sec_edgar_pit_filings",
+      "alpaca_news_pit",
+      "finra_regsho_short_volume",
+      "exchange_calendars_xnys"
+    ],
+    "rth_extended_feed": "sip",
+    "overnight_feed": "boats",
+    "dec6_2026_23x5_cutover_enabled": false,
+    "raw_filter_min_price_usd": 2.0,
+    "raw_filter_min_dollar_vol_usd": 2000000.0,
+    "return_adjustment": "split_dividend_all",
+    "split_exclusion_window_sessions": [
+      -1,
+      3
+    ],
+    "sec_edgar_timestamp_field": "acceptanceDateTime",
+    "sec_freshness_half_life_sec": 900,
+    "dilution_block_forms": [
+      "S-3",
+      "424B2",
+      "424B3",
+      "424B4",
+      "424B5"
+    ],
+    "finra_short_vol_lag_sessions": 1
+  },
+  "statistical_and_queue_gates": {
+    "study_wall_date": "2026-10-15",
+    "spec_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+    "cumulative_trials_n": 84,
+    "hlz_t_hurdle": 4.1604,
+    "cpcv_paths": 5,
+    "cpcv_purge_sessions": 3,
+    "cpcv_embargo_sessions": 2,
+    "max_pbo": 0.3,
+    "min_dsr": 0.95,
+    "intrabar_tie_rule": "ADVERSE_STOP_FIRST",
+    "cost_stress_multipliers": [
+      1.0,
+      2.0
+    ]
+  },
+  "paper_execution_and_adr0022": {
+    "live_execution_enabled": false,
+    "max_initial_stop_pct": 1.9,
+    "alpaca_paper_max_rpm": 200,
+    "ibkr_paper_port": 4002,
+    "ibkr_paper_max_msg_per_min": 3000,
+    "tv_webhook_endpoint": "http://127.0.0.1:8799/api/tv-webhook"
+  }
+}
