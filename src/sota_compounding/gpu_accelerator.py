@@ -196,15 +196,15 @@ def gpu_score_mover_feature_matrix(
         mu = x.mean(dim=0, keepdim=True)
         sd = x.std(dim=0, unbiased=False, keepdim=True).clamp_min(1e-5)
         z = torch.clamp((x - mu) / sd, -4.0, 4.0)
-        raw_score = (z @ w).squeeze(-1) if z.ndim > 1 else torch.zeros(len(rows), device=device)
+        raw_score = (z @ w).reshape(-1) if z.ndim > 1 else torch.zeros(len(rows), device=device)
         # Logistic squash onto 0..100 for bounded dimensionless ranking parity
         alpha_0_100 = 100.0 * torch.sigmoid(raw_score * 1.25)
         ranks = torch.argsort(torch.argsort(alpha_0_100, descending=True)) + 1
         if use_cuda:
             torch.cuda.synchronize()
-        alpha_vals = alpha_0_100.detach().cpu().tolist()
-        raw_vals = raw_score.detach().cpu().tolist()
-        rank_vals = ranks.detach().cpu().tolist()
+        alpha_vals = alpha_0_100.reshape(-1).detach().cpu().tolist()
+        raw_vals = raw_score.reshape(-1).detach().cpu().tolist()
+        rank_vals = ranks.reshape(-1).detach().cpu().tolist()
         dev_str = str(device)
     else:
         n_rows = len(matrix)

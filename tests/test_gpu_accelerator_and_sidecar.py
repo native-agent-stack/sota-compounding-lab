@@ -71,6 +71,9 @@ def test_gpu_score_mover_feature_matrix_orders_ranks_deterministically() -> None
     assert [r["symbol"] for r in res["scores"]] == ["ZZZ", "MMM", "AAA"]
     assert all(0.0 <= r["gpu_alpha_score"] <= 100.0 for r in res["scores"])
 
+    single = gpu_score_mover_feature_matrix([rows[0]], prefer_cuda=True)
+    assert single["ok"] is True and single["count"] == 1 and single["scores"][0]["rank"] == 1
+
 
 def test_gpu_block_bootstrap_sharpe_dsr_is_seeded_and_validates_inputs() -> None:
     rng = random.Random(7)
