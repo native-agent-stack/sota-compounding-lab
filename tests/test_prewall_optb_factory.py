@@ -14,6 +14,11 @@ from materialize_prewall_df10_df6 import (
     compute_regsho_published_ts_utc,
     parse_regsho_pipe_text,
 )
+from run_h106_df8_short_crowding_xsec import (
+    compute_intraday_leg_arrays,
+    compute_intraday_leg_gross_bps,
+    cross_sectional_rank_matrix,
+)
 from run_optb_prewall_factory import (
     EFFECTIVE_HLZ_FLOOR,
     compute_almgren_chriss_cost_bps,
@@ -161,3 +166,64 @@ def test_strict_prewall_gate_enforces_hlz_42019_dsr_cpcv_pbo_and_2x_net() -> Non
     )
     assert multi_fail["passed"] is False
     assert len(multi_fail["fail_reasons"]) == 7
+
+
+def test_h106_intraday_leg_gross_bps_adverse_stop_and_ohlc_validation() -> None:
+    # LONG adverse stop triggers strictly at -200.0 bps even if close recovers above entry
+    assert compute_intraday_leg_gross_bps(100.0, 104.0, 97.99, 103.5, side="LONG") == -200.0
+    # LONG unstopped exit at close
+    assert compute_intraday_leg_gross_bps(100.0, 103.0, 99.0, 102.0, side="LONG") == 200.0
+    # SHORT adverse stop triggers strictly at -200.0 bps even if close drops below entry
+    assert compute_intraday_leg_gross_bps(100.0, 102.01, 96.0, 97.0, side="SHORT") == -200.0
+    # SHORT unstopped exit at close
+    assert compute_intraday_leg_gross_bps(100.0, 101.0, 96.5, 98.0, side="SHORT") == 200.0
+
+    # Inconsistent OHLC bounds and ADR-0022 stop cap > 2.00% must fail closed
+    with pytest.raises(ValueError, match="Inconsistent OHLC"):
+        compute_intraday_leg_gross_bps(105.0, 104.0, 98.0, 101.0, side="LONG")
+    with pytest.raises(ValueError, match="stop_frac"):
+        compute_intraday_leg_gross_bps(100.0, 102.0, 99.0, 101.0, side="LONG", stop_frac=0.025)
+
+
+@given(
+    op=st.floats(min_value=5.0, max_value=500.0, allow_nan=False, allow_infinity=False),
+    up_pct=st.floats(min_value=0.0, max_value=0.15, allow_nan=False, allow_infinity=False),
+    dn_pct=st.floats(min_value=0.0, max_value=0.15, allow_nan=False, allow_infinity=False),
+    cl_frac=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
+)
+def test_property_h106_intraday_stop_floor_never_breached(
+    op: float, up_pct: float, dn_pct: float, cl_frac: float
+) -> None:
+    hi = op * (1.0 + up_pct)
+    lo = max(0.01, op * (1.0 - dn_pct))
+    if lo > op:
+        lo = op
+    cl = lo + cl_frac * (hi - lo)
+    long_bps = compute_intraday_leg_gross_bps(op, hi, lo, cl, side="LONG")
+    short_bps = compute_intraday_leg_gross_bps(op, hi, lo, cl, side="SHORT")
+    assert long_bps >= -200.0 and short_bps >= -200.0
+    assert math.isfinite(long_bps) and math.isfinite(short_bps)
+
+
+def test_h106_vectorized_arrays_and_date_isolated_ranking() -> None:
+    np = pytest.importorskip("numpy")
+    op = np.array([100.0, 100.0])
+    hi = np.array([101.0, 103.0])
+    lo = np.array([97.5, 99.0])
+    cl = np.array([100.5, 98.0])
+    l_g, s_g, l_st, s_st = compute_intraday_leg_arrays(op, hi, lo, cl)
+    assert bool(l_st[0]) is True and float(l_g[0]) == -200.0
+    assert bool(s_st[1]) is True and float(s_g[1]) == -200.0
+    assert float(l_g[1]) == pytest.approx(-200.0, abs=1e-6)
+    assert float(s_g[0]) == pytest.approx(-50.0, abs=1e-6)
+
+    # Rankings on date 0 must remain invariant when date 1 shifts by +1000.0 (zero cross-date leakage)
+    m_base = np.array([[10.0], [20.0], [30.0], [1.0], [2.0], [3.0]], dtype=np.float32)
+    m_shift = np.array([[10.0], [20.0], [30.0], [1001.0], [2002.0], [3003.0]], dtype=np.float32)
+    dc = np.array([0, 0, 0, 1, 1, 1], dtype=np.int64)
+    r_base = cross_sectional_rank_matrix(m_base, dc)
+    r_shift = cross_sectional_rank_matrix(m_shift, dc)
+    assert np.allclose(r_base[:3], r_shift[:3])
+    assert float(r_base[0, 0]) == pytest.approx(-1.0)
+    assert float(r_base[1, 0]) == pytest.approx(0.0)
+    assert float(r_base[2, 0]) == pytest.approx(1.0)

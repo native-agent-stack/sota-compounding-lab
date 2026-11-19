@@ -77,6 +77,7 @@ def sync_lake_tier(src_root: pathlib.Path, dst_root: pathlib.Path, *, verify_sha
                 "df10_daily_20d_baselines.parquet",
                 "df6_regsho_threshold_pit.parquet",
                 "sec_filings_clean_prewall.parquet",
+                "df8_short_interest_clean_prewall.parquet",
             ):
                 src_h = _sha256_file(item)
                 dst_h = _sha256_file(dst_item)

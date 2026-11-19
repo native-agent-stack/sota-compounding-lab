@@ -9,10 +9,14 @@ from hypothesis import strategies as st
 
 from sota_compounding.bitemporal_sidecar import validate_prewall_bitemporal_partition_contract
 from sota_compounding.prewall_h099_enrichment import (
+    CANONICAL_SEC_ALL_DILUTION_FORMS,
+    CANONICAL_SEC_IPO_FORMS,
+    CANONICAL_SEC_SHELF_DILUTION_FORMS,
     DF10_MIN_PRIOR_XNYS_SESSIONS,
     audit_h099_prewall_lake_readiness,
     compute_df10_same_clock_baseline,
     filter_sec_filings_pit_prewall,
+    filter_short_interest_pit_prewall,
     validate_df6_regsho_threshold_snapshot,
 )
 
@@ -179,3 +183,52 @@ def test_property_df10_monotonic_rvol(cur_vol: float) -> None:
     )
     assert res.approved is True
     assert res.rvol_tod >= 0.0
+
+
+def test_df8_short_interest_quarantine_and_canonical_sec_dilution_forms() -> None:
+    # Verify unified dilution / IPO form coverage fixes H103/H104/H105 gaps
+    for req_form in ("S-1", "S-1/A", "S-1MEF", "424B4", "F-1", "S-3", "S-3ASR", "424B2", "424B3", "424B5", "EFFECT"):
+        assert req_form in CANONICAL_SEC_ALL_DILUTION_FORMS
+    assert set(CANONICAL_SEC_IPO_FORMS).isdisjoint(set(CANONICAL_SEC_SHELF_DILUTION_FORMS))
+
+    # Verify filter_sec_filings_pit_prewall accepts raw `accepted` field (sec_filings.parquet schema)
+    sec_raw = [
+        {"form": "S-1MEF", "accepted": "2026-10-15T21:31:14.000Z"},  # 17:31 ET on 2026-10-15 -> pre-wall!
+        {"form": "EFFECT", "accepted": "2026-10-16T10:03:21.000Z"},  # 06:03 ET on 2026-10-16 -> post-wall!
+    ]
+    sec_res = filter_sec_filings_pit_prewall(sec_raw)
+    assert len(sec_res.retained_filings) == 1
+    assert sec_res.purged_postwall_count == 1
+    assert sec_res.purged_missing_ts_count == 0
+
+    # Verify DF8 short_interest pre-wall quarantine & causality enforcement
+    si_records = [
+        {"symbol": "AAA", "settlement": "2026-09-30", "known_from": "2026-10-12"},
+        {"symbol": "AAA", "settlement": "2026-10-15", "known_from": "2026-10-27"},  # known_from > 2026-10-15
+        {"symbol": "BBB", "settlement": "2026-10-16", "known_from": "2026-10-28"},  # settlement > 2026-10-15
+        {"symbol": "CCC", "settlement": "2026-09-30", "known_from": "2026-09-30"},  # causality breach
+        {"symbol": "DDD", "settlement": "2026-09-30", "known_from": ""},  # missing known_from
+    ]
+    si_res = filter_short_interest_pit_prewall(si_records, decision_date=dt.date(2026, 10, 14))
+    assert len(si_res.retained_records) == 1
+    assert si_res.retained_records[0]["symbol"] == "AAA"
+    assert si_res.purged_postwall_count == 2
+    assert si_res.purged_causality_count == 1
+    assert si_res.purged_missing_date_count == 1
+    assert si_res.clean_prewall is False
+
+    # Future decision_date leak check (known_from == decision_date must not be used on same day)
+    same_day = filter_short_interest_pit_prewall(
+        [{"symbol": "AAA", "settlement": "2026-09-30", "known_from": "2026-10-12"}],
+        decision_date=dt.date(2026, 10, 12),
+    )
+    assert len(same_day.retained_records) == 0
+    assert same_day.purged_future_decision_count == 1
+    assert same_day.clean_prewall is True
+
+    # Malformed date string with trailing garbage must fail closed rather than slicing [:10]
+    malformed = filter_short_interest_pit_prewall(
+        [{"symbol": "EEE", "settlement": "2026-09-30", "known_from": "2026-10-12T99:00"}]
+    )
+    assert malformed.purged_missing_date_count == 1
+    assert len(malformed.retained_records) == 0

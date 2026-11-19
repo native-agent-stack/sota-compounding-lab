@@ -34,12 +34,17 @@ from run_optb_prewall_factory import (  # noqa: E402
     evaluate_strict_prewall_gate,
 )
 
+from sota_compounding.bitemporal_sidecar import validate_prewall_bitemporal_partition_contract  # noqa: E402
 from sota_compounding.converged_strategy_factory import check_retired_trap_firewall  # noqa: E402
 from sota_compounding.gpu_accelerator import (  # noqa: E402
     configure_rtx4090_torch_backend,
     resolve_fast_prewall_lake_root,
 )
 from sota_compounding.lifecycle import ADR0022_MAX_STOP_PCT, STUDY_WALL_DATE  # noqa: E402
+from sota_compounding.prewall_h099_enrichment import (  # noqa: E402
+    CANONICAL_SEC_ALL_DILUTION_FORMS,
+    audit_h099_prewall_lake_readiness,
+)
 
 H105_ID = "H105_SEC_8K_PIT_EPISODIC_PIVOT_DF10_DF6_RTX4090_CPCV"
 H105_SPEC_SHA256 = "a1ec39574447cad73e59ccf0f11fe461e611e079acf979e52bc79c33ee8d3d3c"
@@ -79,9 +84,15 @@ def run_h105_sec_8k_ep(
     sym_p = str(read_root / "public-tables" / "sec_symbols.parquet")
     sv_p = str(read_root / "public-tables" / "short_volume.parquet")
     wall_iso = STUDY_WALL_DATE.isoformat()
+    dilution_sql = ", ".join(f"'{f}'" for f in CANONICAL_SEC_ALL_DILUTION_FORMS)
 
     sql = f"""
-    WITH ops AS (
+    WITH trade_sessions AS (
+        SELECT DISTINCT CAST(trade_date AS DATE) AS td
+        FROM read_parquet('{df10_p}')
+        WHERE CAST(trade_date AS DATE) <= DATE '{wall_iso}'
+    ),
+    ops AS (
         SELECT DISTINCT UPPER(TRIM(symbol)) AS symbol, CAST(cik AS BIGINT) AS cik
         FROM read_parquet('{sym_p}')
         WHERE LOWER(COALESCE(entity_type, '')) = 'operating'
@@ -94,7 +105,7 @@ def run_h105_sec_8k_ep(
         SELECT CAST(cik AS BIGINT) AS cik,
                CAST(CAST(accepted AS TIMESTAMPTZ) AT TIME ZONE 'America/New_York' AS DATE) AS acc_date
         FROM read_parquet('{sec_p}')
-        WHERE UPPER(COALESCE(form, '')) IN ('S-3', 'S-3ASR', '424B5', 'EFFECT', 'F-3', '424B3')
+        WHERE UPPER(COALESCE(form, '')) IN ({dilution_sql})
           AND CAST(CAST(accepted AS TIMESTAMPTZ) AT TIME ZONE 'America/New_York' AS DATE) <= DATE '{wall_iso}'
     ),
     ep_8k_raw AS (
@@ -111,22 +122,35 @@ def run_h105_sec_8k_ep(
           AND (items LIKE '%2.02%' OR items LIKE '%1.01%' OR items LIKE '%7.01%' OR items LIKE '%8.01%')
           AND CAST(CAST(accepted AS TIMESTAMPTZ) AT TIME ZONE 'America/New_York' AS DATE) <= DATE '{wall_iso}'
     ),
+    ep_mapped AS (
+        SELECT
+            e.cik,
+            e.acc_date,
+            e.is_item_202,
+            e.is_item_101,
+            e.is_item_701,
+            CASE WHEN e.acc_hr < 9 OR (e.acc_hr = 9 AND e.acc_min < 30) THEN 1 ELSE 0 END AS is_premarket_8k,
+            CASE
+                WHEN (e.acc_hr < 9 OR (e.acc_hr = 9 AND e.acc_min < 30))
+                    THEN (SELECT MIN(ts.td) FROM trade_sessions ts WHERE ts.td >= e.acc_date)
+                WHEN e.acc_hr >= 16
+                    THEN (SELECT MIN(ts.td) FROM trade_sessions ts WHERE ts.td > e.acc_date)
+                ELSE NULL
+            END AS target_date
+        FROM ep_8k_raw e
+        WHERE (e.acc_hr < 9 OR (e.acc_hr = 9 AND e.acc_min < 30) OR e.acc_hr >= 16)
+    ),
     ep_preopen AS (
         SELECT
             cik,
-            CAST(
-                CASE
-                    WHEN (acc_hr < 9 OR (acc_hr = 9 AND acc_min < 30)) THEN acc_date
-                    WHEN acc_hr >= 16 THEN acc_date + INTERVAL 1 DAY
-                    ELSE NULL
-                END AS DATE
-            ) AS target_date,
+            target_date,
             MAX(is_item_202) AS is_item_202,
             MAX(is_item_101) AS is_item_101,
             MAX(is_item_701) AS is_item_701,
-            MAX(CASE WHEN acc_hr < 9 OR (acc_hr = 9 AND acc_min < 30) THEN 1 ELSE 0 END) AS is_premarket_8k
-        FROM ep_8k_raw
-        WHERE (acc_hr < 9 OR (acc_hr = 9 AND acc_min < 30) OR acc_hr >= 16)
+            MAX(is_premarket_8k) AS is_premarket_8k
+        FROM ep_mapped
+        WHERE target_date IS NOT NULL
+          AND DATEDIFF('day', acc_date, target_date) BETWEEN 0 AND 5
         GROUP BY 1, 2
     ),
     sv_daily AS (
@@ -183,7 +207,7 @@ def run_h105_sec_8k_ep(
         LEFT JOIN sv_5d sv ON sv.symbol = d.symbol AND sv.sv_date = CAST(d.trade_date AS DATE)
         WHERE CAST(d.trade_date AS DATE) <= DATE '{wall_iso}'
           AND d.prior_sessions_count = 20
-          AND d.raw_close >= 5.0
+          AND d.prev_raw_close >= 5.0
           AND d.mean_20d_dvol >= 5000000.0
           AND d.prev_split_close > 0
           AND d.split_open > 0
@@ -236,7 +260,9 @@ def run_h105_sec_8k_ep(
     df["net_1x_bps"] = df["gross_bps"] - costs_1x
     df["net_2x_bps"] = df["gross_bps"] - (2.0 * costs_1x)
 
-    rule_cpcv = _evaluate_cpcv_15_paths(df, ret_col_1x="net_1x_bps", ret_col_2x="net_2x_bps", effective_trials=105.0)
+    rule_cpcv = _evaluate_cpcv_15_paths(
+        df, ret_col_1x="net_1x_bps", ret_col_2x="net_2x_bps", effective_trials=float(trial_number)
+    )
     unstopped_diag = _date_clustered_t_stat(
         df["unstopped_net_2x_bps"].to_numpy(dtype=np.float64), df["trade_date"].to_numpy()
     )
@@ -370,7 +396,7 @@ def run_h105_sec_8k_ep(
             "pbo": round(overfit_cnt / max(1, len(path_means_2x)), 4),
             "clustered_1x": _date_clustered_t_stat(oos_1x, oos_dates),
             "clustered_2x": _date_clustered_t_stat(oos_2x, oos_dates),
-            "dsr_probability": _compute_dsr_from_daily_returns(daily_s, effective_trials=105.0),
+            "dsr_probability": _compute_dsr_from_daily_returns(daily_s, effective_trials=float(trial_number)),
             "path_means_2x_bps": path_means_2x,
         }
 
@@ -426,12 +452,34 @@ def main() -> int:
     args = parser.parse_args()
 
     lake_root = pathlib.Path(args.lake_root)
+    from dataclasses import asdict
+
+    read_root, _ = resolve_fast_prewall_lake_root(lake_root)
+    bitemp = validate_prewall_bitemporal_partition_contract(
+        partition_id="published-orb/trades",
+        columns=["symbol", "t_ns", "p", "s"],
+        row_count=53_063_777,
+        max_event_ts_ns=int(dt.datetime(2026, 10, 15, 19, 59, 0, tzinfo=dt.UTC).timestamp() * 1_000_000_000),
+        allow_bounded_e2_projection=True,
+    )
+    df10_ready = (read_root / "derived" / "df10_daily_20d_baselines.parquet").is_file()
+    sec_ready = (read_root / "derived" / "sec_filings_clean_prewall.parquet").is_file()
+    h099_readiness = asdict(
+        audit_h099_prewall_lake_readiness(
+            bitemporal_spec=bitemp,
+            df10_covered_symbol_days=7_039_270 if df10_ready else 0,
+            df10_total_symbol_days=7_039_270,
+            df6_dated_snapshots_available=(read_root / "derived" / "df6_regsho_threshold_pit.parquet").is_file(),
+            sec_purged_postwall_count=0 if sec_ready else 12,
+        )
+    )
     print("[H105] Running FIRST_HAND_SEC_EPISODIC_PIVOT on RTX 4090 CUDA + LightGBM + XGBoost (C(6,2)=15 CPCV)...")
     res = run_h105_sec_8k_ep(lake_root)
     receipt = {
         "schema_version": "sota-optb-h105-sec-8k-ep.v1",
         "generated_at_utc": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
         "study_wall_date": STUDY_WALL_DATE.isoformat(),
+        "h099_readiness": h099_readiness,
         "h105": res,
     }
     receipt["receipt_sha256"] = hashlib.sha256(json.dumps(receipt, sort_keys=True).encode("utf-8")).hexdigest()

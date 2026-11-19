@@ -22,6 +22,7 @@ import datetime as dt
 import hashlib
 import json
 import math
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -35,6 +36,21 @@ from sota_compounding.symbol_ranking_v310 import _to_ny_datetime
 H099_ENRICHMENT_SCHEMA = "sota-prewall-h099-enrichment.v1"
 DF10_MIN_PRIOR_XNYS_SESSIONS: int = 20
 DF10_MIN_STD_FLOOR_RATIO: float = 1e-6
+CANONICAL_SEC_IPO_FORMS: tuple[str, ...] = ("S-1", "S-1/A", "S-1MEF", "424B4", "F-1")
+CANONICAL_SEC_SHELF_DILUTION_FORMS: tuple[str, ...] = (
+    "S-3",
+    "S-3ASR",
+    "F-3",
+    "424B2",
+    "424B3",
+    "424B5",
+    "424B7",
+    "424B8",
+    "EFFECT",
+)
+CANONICAL_SEC_ALL_DILUTION_FORMS: tuple[str, ...] = tuple(
+    dict.fromkeys((*CANONICAL_SEC_SHELF_DILUTION_FORMS, *CANONICAL_SEC_IPO_FORMS))
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +83,16 @@ class SecPrewallFilterResult:
     retained_filings: tuple[dict[str, Any], ...]
     purged_postwall_count: int
     purged_missing_ts_count: int
+    purged_future_decision_count: int
+    clean_prewall: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ShortInterestPrewallFilterResult:
+    retained_records: tuple[dict[str, Any], ...]
+    purged_postwall_count: int
+    purged_missing_date_count: int
+    purged_causality_count: int
     purged_future_decision_count: int
     clean_prewall: bool
 
@@ -231,6 +257,25 @@ def validate_df6_regsho_threshold_snapshot(
     )
 
 
+_ISO_DATE_RX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _parse_iso_date(raw: Any) -> dt.date | None:
+    if isinstance(raw, dt.datetime):
+        return raw.date()
+    if isinstance(raw, dt.date):
+        return raw
+    if not isinstance(raw, str):
+        return None
+    s = raw.strip()
+    if not _ISO_DATE_RX.fullmatch(s):
+        return None
+    try:
+        return dt.date.fromisoformat(s)
+    except ValueError:
+        return None
+
+
 def filter_sec_filings_pit_prewall(
     filings: list[dict[str, Any]],
     *,
@@ -251,7 +296,7 @@ def filter_sec_filings_pit_prewall(
         if not isinstance(rec, dict):
             purged_missing += 1
             continue
-        acc_dt = _parse_iso_utc(rec.get("accepted_at_utc") or rec.get("acceptanceDateTime"))
+        acc_dt = _parse_iso_utc(rec.get("accepted_at_utc") or rec.get("acceptanceDateTime") or rec.get("accepted"))
         if acc_dt is None:
             purged_missing += 1
             continue
@@ -270,6 +315,48 @@ def filter_sec_filings_pit_prewall(
         purged_missing_ts_count=purged_missing,
         purged_future_decision_count=purged_future_dec,
         clean_prewall=(purged_postwall == 0 and purged_missing == 0),
+    )
+
+
+def filter_short_interest_pit_prewall(
+    records: list[dict[str, Any]],
+    *,
+    decision_date: dt.date | None = None,
+) -> ShortInterestPrewallFilterResult:
+    """Enforce strict `known_from <= 2026-10-15` & `settlement < known_from` DF8 PIT causality."""
+    retained: list[dict[str, Any]] = []
+    purged_postwall = 0
+    purged_missing = 0
+    purged_causality = 0
+    purged_future_dec = 0
+
+    for rec in records:
+        if not isinstance(rec, dict):
+            purged_missing += 1
+            continue
+        known_d = _parse_iso_date(rec.get("known_from"))
+        settle_d = _parse_iso_date(rec.get("settlement"))
+        if known_d is None or settle_d is None:
+            purged_missing += 1
+            continue
+        if known_d > STUDY_WALL_DATE or settle_d > STUDY_WALL_DATE:
+            purged_postwall += 1
+            continue
+        if known_d <= settle_d:
+            purged_causality += 1
+            continue
+        if decision_date is not None and known_d >= decision_date:
+            purged_future_dec += 1
+            continue
+        retained.append(dict(rec))
+
+    return ShortInterestPrewallFilterResult(
+        retained_records=tuple(retained),
+        purged_postwall_count=purged_postwall,
+        purged_missing_date_count=purged_missing,
+        purged_causality_count=purged_causality,
+        purged_future_decision_count=purged_future_dec,
+        clean_prewall=(purged_postwall == 0 and purged_missing == 0 and purged_causality == 0),
     )
 
 
