@@ -24,6 +24,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
+from statistics import StatisticsError
 from typing import Any
 
 from sota_compounding.lifecycle import STUDY_WALL_DATE, hlz_dynamic_t_hurdle
@@ -60,13 +61,55 @@ RED_NEGATIVE_EB_MIN_LIVE_SAMPLE_N: int = 10
 _ROUND_DP: int = 6
 
 
+def _canonical_zero(value: float) -> float:
+    """Collapse signed zero (`-0.0 -> 0.0`) so equal values always serialize to identical receipt bytes."""
+    return 0.0 if value == 0.0 else value
+
+
 def _require_finite_real(value: Any, field_name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"{field_name} must be a real number (got {value!r})")
-    fval = float(value)
+    try:
+        fval = float(value)
+    except OverflowError as exc:
+        raise ValueError(
+            f"{field_name} overflows IEEE-754 float64 (got an integer of {value.bit_length()} bits)"
+        ) from exc
     if not math.isfinite(fval):
         raise ValueError(f"{field_name} must be finite (got {value!r})")
-    return fval
+    return _canonical_zero(fval)
+
+
+def _require_finite_derived(value: float, field_name: str) -> float:
+    """Fail closed on derived arithmetic that overflowed (e.g. `1.7e308 - -1.7e308 -> inf`)."""
+    if not math.isfinite(value):
+        raise ValueError(f"Derived-Domain Violation: {field_name} is non-finite ({value!r}); inputs out of range")
+    return _canonical_zero(value)
+
+
+def _round_derived(value: float, field_name: str) -> float:
+    return _require_finite_derived(round(_require_finite_derived(value, field_name), _ROUND_DP), field_name)
+
+
+def _require_shrinkage_k(value: Any) -> float:
+    k_val = _require_finite_real(value, "shrinkage_k")
+    if k_val <= 0.0:
+        raise ValueError(f"shrinkage_k must be > 0.0 (got {value!r})")
+    return k_val
+
+
+def _eb_live_weight_ratio(live_sample_n: int, shrinkage_k: float) -> float:
+    """Scale-invariant `n / (n + k)` in `[0, 1]` that never overflows `n + k` (e.g. `n = 10**308, k = 1e308 -> 0.5`)."""
+    if live_sample_n == 0:
+        return 0.0
+    try:
+        fn = float(live_sample_n)
+    except OverflowError:
+        return 1.0
+    if fn >= shrinkage_k:
+        return 1.0 / (1.0 + shrinkage_k / fn)
+    n_over_k = fn / shrinkage_k
+    return n_over_k / (1.0 + n_over_k)
 
 
 def _require_ratio(value: Any, field_name: str) -> float:
@@ -143,6 +186,7 @@ class QueueParityBaseline:
         )
         object.__setattr__(self, "sim_sample_n", _require_count(self.sim_sample_n, "sim_sample_n"))
         object.__setattr__(self, "hlz_trials_n", _require_count(self.hlz_trials_n, "hlz_trials_n"))
+        compute_hlz_t_hurdle(self.hlz_trials_n)  # fail closed at construction if outside the HLZ domain
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,7 +234,12 @@ def compute_hlz_t_hurdle(trials_n: int) -> float:
     `102 -> 4.2041`, `103 -> 4.2063`. Non-decreasing in `trials_n` (rounded to 4 decimals).
     """
     n_trials = _require_count(trials_n, "trials_n")
-    return hlz_dynamic_t_hurdle(n_trials + 1)
+    try:
+        return hlz_dynamic_t_hurdle(n_trials + 1)
+    except (OverflowError, StatisticsError) as exc:
+        raise ValueError(
+            f"trials_n={n_trials} is outside the representable HLZ domain (one-sided p underflows): {exc}"
+        ) from exc
 
 
 def _classify(
@@ -239,7 +288,8 @@ def reconcile_live_vs_sim_parity(
     """Reconcile one live paper lane against its pre-wall queue-parity baseline (advisory, never halts paper).
 
     `eb_shrunk_net_edge_bps = w * live_net + (1 - w) * prior_edge_bps` with `w = live_sample_n / (live_sample_n
-    + shrinkage_k)`, `live_net = live_gross_edge_bps - live_implementation_shortfall_bps` and
+    + shrinkage_k)` evaluated scale-invariantly (never overflowing `n + k`),
+    `live_net = live_gross_edge_bps - live_implementation_shortfall_bps` and
     `prior_edge_bps = sim_gross_edge_bps - sim_expected_slippage_bps`; the result is clamped to
     `[min(prior, live_net), max(prior, live_net)]` after rounding so the convex-combination bound is exact.
     """
@@ -249,21 +299,27 @@ def reconcile_live_vs_sim_parity(
         raise ValueError(f"live_obs must be a LivePaperTcaObservation (got {type(live_obs).__name__})")
     if baseline.strategy_id != live_obs.strategy_id:
         raise ValueError(f"strategy_id mismatch: baseline={baseline.strategy_id!r} vs live={live_obs.strategy_id!r}")
-    k_val = _require_finite_real(shrinkage_k, "shrinkage_k")
-    if k_val <= 0.0:
-        raise ValueError(f"shrinkage_k must be > 0.0 (got {shrinkage_k!r})")
+    k_val = _require_shrinkage_k(shrinkage_k)
     t_stat = None if hlz_t_stat is None else _require_finite_real(hlz_t_stat, "hlz_t_stat")
 
-    slippage_drift_bps = round(
-        live_obs.live_implementation_shortfall_bps - baseline.sim_expected_slippage_bps, _ROUND_DP
+    slippage_drift_bps = _round_derived(
+        live_obs.live_implementation_shortfall_bps - baseline.sim_expected_slippage_bps, "slippage_drift_bps"
     )
-    fill_rate_gap_ratio = round(live_obs.live_fill_rate_ratio - baseline.sim_fill_rate_ratio, _ROUND_DP)
-    prior_edge_bps = round(baseline.sim_gross_edge_bps - baseline.sim_expected_slippage_bps, _ROUND_DP)
-    live_net_edge_bps = round(live_obs.live_gross_edge_bps - live_obs.live_implementation_shortfall_bps, _ROUND_DP)
-    eb_live_weight_ratio = live_obs.live_sample_n / (live_obs.live_sample_n + k_val)
-    eb_raw = eb_live_weight_ratio * live_net_edge_bps + (1.0 - eb_live_weight_ratio) * prior_edge_bps
+    fill_rate_gap_ratio = _round_derived(
+        live_obs.live_fill_rate_ratio - baseline.sim_fill_rate_ratio, "fill_rate_gap_ratio"
+    )
+    prior_edge_bps = _round_derived(baseline.sim_gross_edge_bps - baseline.sim_expected_slippage_bps, "prior_edge_bps")
+    live_net_edge_bps = _round_derived(
+        live_obs.live_gross_edge_bps - live_obs.live_implementation_shortfall_bps, "live_net_edge_bps"
+    )
+    eb_live_weight_ratio = _eb_live_weight_ratio(live_obs.live_sample_n, k_val)
+    eb_raw = _require_finite_derived(
+        eb_live_weight_ratio * live_net_edge_bps + (1.0 - eb_live_weight_ratio) * prior_edge_bps, "eb_raw"
+    )
     eb_lo, eb_hi = min(prior_edge_bps, live_net_edge_bps), max(prior_edge_bps, live_net_edge_bps)
-    eb_shrunk_net_edge_bps = min(eb_hi, max(eb_lo, round(eb_raw, _ROUND_DP)))
+    eb_shrunk_net_edge_bps = _require_finite_derived(
+        min(eb_hi, max(eb_lo, _round_derived(eb_raw, "eb_raw"))), "eb_shrunk_net_edge_bps"
+    )
 
     status, breach_reasons = _classify(
         slippage_drift_bps=slippage_drift_bps,
@@ -297,7 +353,7 @@ def reconcile_live_vs_sim_parity(
         "prior_edge_bps": prior_edge_bps,
         "live_net_edge_bps": live_net_edge_bps,
         "shrinkage_k": k_val,
-        "eb_live_weight_ratio": round(eb_live_weight_ratio, _ROUND_DP),
+        "eb_live_weight_ratio": _round_derived(eb_live_weight_ratio, "eb_live_weight_ratio"),
         "eb_shrunk_net_edge_bps": eb_shrunk_net_edge_bps,
         "hlz_trials_n": baseline.hlz_trials_n,
         "hlz_t_hurdle": hlz_t_hurdle,
@@ -313,6 +369,19 @@ def reconcile_live_vs_sim_parity(
     return record
 
 
+def _validate_hlz_t_stats(hlz_t_stats: Any) -> dict[str, float]:
+    """Validate every `{strategy_id: hlz_t_stat}` entry upfront, including entries with no observation."""
+    if hlz_t_stats is None:
+        return {}
+    if not isinstance(hlz_t_stats, Mapping):
+        raise ValueError(f"hlz_t_stats must be a Mapping[str, float] or None (got {type(hlz_t_stats).__name__})")
+    validated: dict[str, float] = {}
+    for sid, t_val in hlz_t_stats.items():
+        label = _require_label(sid, "hlz_t_stats key")
+        validated[label] = _require_finite_real(t_val, f"hlz_t_stats[{label!r}]")
+    return validated
+
+
 def reconcile_fleet_parity(
     baselines: Sequence[QueueParityBaseline],
     observations: Sequence[LivePaperTcaObservation],
@@ -325,6 +394,8 @@ def reconcile_fleet_parity(
     Output is independent of input ordering (rows sorted by `(strategy_id, account_lane)`); observations with no
     matching baseline are listed under `unmatched_observations` instead of raising.
     """
+    k_val = _require_shrinkage_k(shrinkage_k)
+    t_stats = _validate_hlz_t_stats(hlz_t_stats)
     by_strategy: dict[str, QueueParityBaseline] = {}
     for b in baselines:
         if not isinstance(b, QueueParityBaseline):
@@ -333,7 +404,6 @@ def reconcile_fleet_parity(
             raise ValueError(f"duplicate baseline strategy_id: {b.strategy_id!r}")
         by_strategy[b.strategy_id] = b
 
-    t_stats = dict(hlz_t_stats or {})
     observations = list(observations)
     seen_keys: set[tuple[str, str]] = set()
     rows: list[dict[str, Any]] = []
@@ -350,7 +420,7 @@ def reconcile_fleet_parity(
         if base is None:
             unmatched.append({"strategy_id": obs.strategy_id, "account_lane": obs.account_lane})
             continue
-        rows.append(reconcile_live_vs_sim_parity(base, obs, shrinkage_k, hlz_t_stat=t_stats.get(obs.strategy_id)))
+        rows.append(reconcile_live_vs_sim_parity(base, obs, k_val, hlz_t_stat=t_stats.get(obs.strategy_id)))
 
     observed_strategies = {r["strategy_id"] for r in rows}
     status_counts = {s: 0 for s in PARITY_STATUS_SEVERITY}
@@ -365,7 +435,9 @@ def reconcile_fleet_parity(
     def _weighted_mean(field: str) -> float | None:
         if total_live_n <= 0:
             return None
-        return round(sum(r[field] * r["live_sample_n"] for r in rows) / total_live_n, _ROUND_DP)
+        # Convex weights `n_i / N` are computed first (exact int/int true division, <= 1.0) so the product never
+        # overflows even for astronomically large integer sample counts; the result is finite-guarded.
+        return _round_derived(sum(r[field] * (r["live_sample_n"] / total_live_n) for r in rows), f"weighted_{field}")
 
     summary: dict[str, Any] = {
         "schema_version": TCA_QUEUE_PARITY_SCHEMA,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from hypothesis import given, settings
@@ -370,3 +370,166 @@ def test_status_monotonically_degrades_with_slippage_drift(
     assert better["slippage_drift_bps"] <= worse["slippage_drift_bps"]
     assert better["eb_shrunk_net_edge_bps"] >= worse["eb_shrunk_net_edge_bps"]
     assert PARITY_STATUS_SEVERITY[better["parity_status"]] <= PARITY_STATUS_SEVERITY[worse["parity_status"]]
+
+
+# --------------------------------------------------------------------------------------------- falsifier regressions
+
+
+# P1-1: arbitrarily large Python ints must fail closed with ValueError, never an uncaught OverflowError.
+@pytest.mark.parametrize("field", ["sim_expected_slippage_bps", "sim_gross_edge_bps", "sim_fill_rate_ratio"])
+def test_p1_1_baseline_huge_int_overflow_is_value_error(field: str) -> None:
+    with pytest.raises(ValueError, match="overflows IEEE-754"):
+        _baseline(**{field: 10**400})
+
+
+@pytest.mark.parametrize("field", ["live_implementation_shortfall_bps", "live_markout_60s_bps", "live_gross_edge_bps"])
+def test_p1_1_observation_huge_int_overflow_is_value_error(field: str) -> None:
+    with pytest.raises(ValueError, match="overflows IEEE-754"):
+        _obs(**{field: 10**400})
+
+
+def test_p1_1_huge_int_shrinkage_k_and_t_stat_are_value_errors() -> None:
+    with pytest.raises(ValueError):
+        reconcile_live_vs_sim_parity(_baseline(), _obs(), shrinkage_k=10**400)
+    with pytest.raises(ValueError):
+        reconcile_live_vs_sim_parity(_baseline(), _obs(), hlz_t_stat=10**400)
+
+
+# P1-2: shrinkage_k is validated unconditionally, even with empty or fully unmatched fleets.
+@pytest.mark.parametrize("bad_k", [0.0, -1.0, float("nan"), float("inf"), 10**400, True, "20"])
+def test_p1_2_fleet_rejects_bad_shrinkage_k_when_empty_or_unmatched(bad_k: object) -> None:
+    with pytest.raises(ValueError):
+        reconcile_fleet_parity([], [], shrinkage_k=bad_k)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        reconcile_fleet_parity([_baseline()], [], shrinkage_k=bad_k)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        reconcile_fleet_parity([], [_obs(strategy_id="H_ORPHAN")], shrinkage_k=bad_k)  # type: ignore[arg-type]
+
+
+# P1-3: scale-invariant EB weight; n + k overflow must not collapse w to 0.0 and invert RED -> GREEN.
+def test_p1_3_eb_weight_scale_invariant_preserves_throttle_red() -> None:
+    # prior = 12.0, live_net = -25 - 5 = -30.0, drift = 2.0, gap = 0.05, markout = -1.0
+    rec = reconcile_live_vs_sim_parity(
+        _baseline(), _obs(live_sample_n=10**308, live_gross_edge_bps=-25.0), shrinkage_k=1e308
+    )
+    assert rec["eb_live_weight_ratio"] == 0.5
+    assert rec["eb_shrunk_net_edge_bps"] == pytest.approx(-9.0, abs=1e-6)
+    assert rec["parity_status"] == THROTTLE_RED
+    small = reconcile_live_vs_sim_parity(
+        _baseline(), _obs(live_sample_n=20, live_gross_edge_bps=-25.0), shrinkage_k=20.0
+    )
+    assert small["eb_live_weight_ratio"] == rec["eb_live_weight_ratio"]
+    assert small["eb_shrunk_net_edge_bps"] == rec["eb_shrunk_net_edge_bps"]
+
+
+def test_p1_3_eb_weight_extremes() -> None:
+    # float(n) overflow -> live evidence fully dominates (w = 1.0).
+    huge = reconcile_live_vs_sim_parity(_baseline(), _obs(live_sample_n=10**400), shrinkage_k=20.0)
+    assert huge["eb_live_weight_ratio"] == 1.0
+    assert huge["eb_shrunk_net_edge_bps"] == huge["live_net_edge_bps"]
+    tiny = reconcile_live_vs_sim_parity(_baseline(), _obs(live_sample_n=1), shrinkage_k=1e308)
+    assert tiny["eb_live_weight_ratio"] == 0.0
+    assert tiny["eb_shrunk_net_edge_bps"] == tiny["prior_edge_bps"]
+    json.dumps(huge, allow_nan=False)
+
+
+@given(n=st.integers(min_value=1, max_value=10**12), k=SHRINK_K, scale_exp=st.integers(min_value=0, max_value=290))
+def test_p1_3_eb_weight_invariant_under_joint_rescaling(n: int, k: float, scale_exp: int) -> None:
+    base = reconcile_live_vs_sim_parity(_baseline(), _obs(live_sample_n=n), shrinkage_k=k)
+    scaled = reconcile_live_vs_sim_parity(
+        _baseline(), _obs(live_sample_n=n * 10**scale_exp), shrinkage_k=k * 10.0**scale_exp
+    )
+    assert scaled["eb_live_weight_ratio"] == pytest.approx(base["eb_live_weight_ratio"], abs=2e-6)
+    assert 0.0 <= scaled["eb_live_weight_ratio"] <= 1.0
+
+
+@pytest.mark.parametrize(
+    ("base_kw", "obs_kw", "field"),
+    [
+        ({"sim_expected_slippage_bps": -1.7e308}, {"live_implementation_shortfall_bps": 1.7e308}, "slippage_drift_bps"),
+        ({"sim_gross_edge_bps": 1.7e308, "sim_expected_slippage_bps": -1.7e308}, {}, "prior_edge_bps"),
+        ({}, {"live_gross_edge_bps": 1.7e308, "live_implementation_shortfall_bps": -1.7e308}, "live_net_edge_bps"),
+    ],
+)
+def test_p1_3_derived_float_overflow_fails_closed(
+    base_kw: dict[str, object], obs_kw: dict[str, object], field: str
+) -> None:
+    with pytest.raises(ValueError, match=f"Derived-Domain Violation: {field}"):
+        reconcile_live_vs_sim_parity(_baseline(**base_kw), _obs(**obs_kw))
+
+
+# P2-1: signed zero canonicalization -> identical receipts.
+def test_p2_1_negative_zero_canonicalized_in_receipt() -> None:
+    pos = reconcile_live_vs_sim_parity(_baseline(), _obs(live_markout_1s_bps=0.0, live_markout_300s_bps=0.0))
+    neg = reconcile_live_vs_sim_parity(_baseline(), _obs(live_markout_1s_bps=-0.0, live_markout_300s_bps=-0.0))
+    assert pos["receipt_sha256"] == neg["receipt_sha256"]
+    assert math.copysign(1.0, neg["live_markout_1s_bps"]) == 1.0
+    # Rounded derived value that would be -0.0 (round(-1e-9, 6) == -0.0) is canonicalized too.
+    tiny_neg = reconcile_live_vs_sim_parity(
+        _baseline(sim_expected_slippage_bps=3.0), _obs(live_implementation_shortfall_bps=3.0 - 1e-9)
+    )
+    assert math.copysign(1.0, tiny_neg["slippage_drift_bps"]) == 1.0
+    t_pos = reconcile_live_vs_sim_parity(_baseline(), _obs(), hlz_t_stat=0.0)
+    t_neg = reconcile_live_vs_sim_parity(_baseline(), _obs(), hlz_t_stat=-0.0)
+    assert t_pos["receipt_sha256"] == t_neg["receipt_sha256"]
+
+
+# P2-2: weighted means never overflow on intermediate products.
+def test_p2_2_weighted_mean_no_intermediate_overflow() -> None:
+    fleet = reconcile_fleet_parity(
+        [_baseline()],
+        [
+            _obs(account_lane=":8787", live_sample_n=10**400, live_gross_edge_bps=1e300),
+            _obs(account_lane=":4002", live_sample_n=10**400, live_gross_edge_bps=1e300),
+        ],
+    )
+    assert fleet["total_live_sample_n"] == 2 * 10**400
+    assert fleet["weighted_slippage_drift_bps"] == 2.0
+    assert math.isfinite(fleet["weighted_eb_shrunk_net_edge_bps"])
+    json.dumps(fleet, allow_nan=False)
+
+
+# P2-3: extreme trial counts raise domain ValueError (never OverflowError / StatisticsError leak).
+def test_p2_3_hlz_exact_domain_boundary() -> None:
+    # Next-trial convention t*(n + 1): last representable n where 1 - 0.00135 / (n + 1) < 1.0 in float64.
+    assert compute_hlz_t_hurdle(24_319_437_987_799) == 8.2095
+    with pytest.raises(ValueError, match="outside the representable HLZ domain"):
+        compute_hlz_t_hurdle(24_319_437_987_800)
+
+
+@pytest.mark.parametrize("trials_n", [24_319_437_987_800, 10**15, 10**400])
+def test_p2_3_hlz_extreme_trials_raise_value_error(trials_n: int) -> None:
+    with pytest.raises(ValueError, match="outside the representable HLZ domain"):
+        compute_hlz_t_hurdle(trials_n)
+    with pytest.raises(ValueError, match="outside the representable HLZ domain"):
+        _baseline(hlz_trials_n=trials_n)
+
+
+# P2-4: hlz_t_stats validated upfront; malformed dates rejected.
+@pytest.mark.parametrize(
+    "bad_stats",
+    [
+        [("H_TEST_QUEUE", 4.5)],
+        "H_TEST_QUEUE",
+        {"H_TEST_QUEUE": float("nan")},
+        {"H_UNOBSERVED": float("inf")},
+        {"H_TEST_QUEUE": "4.5"},
+        {"H_TEST_QUEUE": True},
+        {"H_TEST_QUEUE": 10**400},
+        {"": 4.5},
+        {7: 4.5},
+    ],
+)
+def test_p2_4_hlz_t_stats_validated_upfront(bad_stats: object) -> None:
+    with pytest.raises(ValueError):
+        reconcile_fleet_parity([_baseline()], [_obs()], hlz_t_stats=bad_stats)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        reconcile_fleet_parity([], [], hlz_t_stats=bad_stats)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "bad_date", ["2026-10-99", "2026-02-30", "not-a-date", "", datetime(2026, 10, 1, 9, 30), None, 20261015]
+)
+def test_p2_4_malformed_prewall_dates_rejected(bad_date: object) -> None:
+    with pytest.raises(ValueError):
+        _baseline(prewall_cutoff_date=bad_date)

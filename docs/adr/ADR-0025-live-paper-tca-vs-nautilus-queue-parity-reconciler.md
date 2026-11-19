@@ -75,6 +75,23 @@ Every record carries `paper_policy = "NEVER_GATED_ADVISORY"` and `halts_paper_fa
 
 Duplicate baselines, and duplicate `(strategy_id, account_lane)` observations, raise `ValueError`.
 
+### Numeric domain hardening (cross-vendor falsifier audit of the initial commit)
+
+The following inputs now fail closed with `ValueError` and never leak `OverflowError`, `StatisticsError` or a non-finite receipt:
+
+- **Huge integer inputs.** Integers beyond float64 range (for example `10**400`) are rejected.
+- **`shrinkage_k`.** Validated unconditionally, including for empty or fully unmatched fleets.
+- **`hlz_t_stats`.** Must be a `Mapping` with non-empty string keys and finite values. Every entry is validated upfront.
+- **HLZ trial counts.** Counts are rejected where the one-sided `p` underflows (`trials_n >= 24,319,437,987,800`), at construction and at hurdle time.
+- **Derived floats.** Every derived float (`slippage_drift_bps`, `fill_rate_gap_ratio`, `prior_edge_bps`, `live_net_edge_bps`, the raw EB value, `eb_shrunk_net_edge_bps`, the fleet weighted means) is `math.isfinite`-guarded before classification (`Derived-Domain Violation`).
+
+Two computations were changed so they cannot overflow or change the receipt:
+
+- **EB weight.** `eb_live_weight_ratio` is computed scale-invariantly, as `1 / (1 + k/n)` when `n >= k` and `(n/k) / (1 + n/k)` otherwise. It is `1.0` when `float(n)` overflows. So `n = 10**308, k = 1e308` gives `0.5`, the same as `n = k = 20`; previously `n + k = inf` collapsed the weight to `0.0` and turned a `THROTTLE_RED` lane `PARITY_GREEN`.
+- **Weighted means.** Fleet means use convex weights `n_i / N`, so no `value * n_i` product is formed.
+
+Signed zero is canonicalized (`-0.0 -> 0.0`) on validated and rounded floats, so `-0.0` and `+0.0` inputs produce identical `receipt_sha256` values.
+
 ### Consequences
 
 - Good: queue-model optimism (fill-rate overstatement, slippage understatement, adverse selection at 60 s) now shows up per lane before EB realized-`R` damping catches it, with a reproducible receipt.
