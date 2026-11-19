@@ -29,6 +29,10 @@ if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from sota_compounding.converged_strategy_factory import check_retired_trap_firewall  # noqa: E402
+from sota_compounding.gpu_accelerator import (  # noqa: E402
+    configure_rtx4090_torch_backend,
+    resolve_fast_prewall_lake_root,
+)
 from sota_compounding.lifecycle import ADR0022_MAX_STOP_PCT, STUDY_WALL_DATE, hlz_dynamic_t_hurdle  # noqa: E402
 
 EFFECTIVE_HLZ_FLOOR: float = 4.2019
@@ -301,13 +305,15 @@ def run_h103_slow_coil_rtx4090_factory(
     if not ok_fw:
         raise RuntimeError(f"H103 blocked by Retired-Trap Firewall: {fw_viol}")
 
+    configure_rtx4090_torch_backend()
+    read_root, _fast_tier = resolve_fast_prewall_lake_root(lake_root)
     con = duckdb.connect()
     con.execute("PRAGMA threads=32")
-    df10_p = str(lake_root / "derived" / "df10_daily_20d_baselines.parquet")
-    df6_p = str(lake_root / "derived" / "df6_regsho_threshold_pit.parquet")
-    sec_p = str(lake_root / "derived" / "sec_filings_clean_prewall.parquet")
-    sym_p = str(lake_root / "public-tables" / "sec_symbols.parquet")
-    sv_p = str(lake_root / "public-tables" / "short_volume.parquet")
+    df10_p = str(read_root / "derived" / "df10_daily_20d_baselines.parquet")
+    df6_p = str(read_root / "derived" / "df6_regsho_threshold_pit.parquet")
+    sec_p = str(read_root / "derived" / "sec_filings_clean_prewall.parquet")
+    sym_p = str(read_root / "public-tables" / "sec_symbols.parquet")
+    sv_p = str(read_root / "public-tables" / "short_volume.parquet")
 
     # Strictly pre-wall <= 2026-10-15 join: DF10 + operating sec_symbols + 90d SEC dilution + DF6 + 5d short_volume
     wall_iso = STUDY_WALL_DATE.isoformat()

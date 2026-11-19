@@ -35,6 +35,10 @@ from run_optb_prewall_factory import (  # noqa: E402
 )
 
 from sota_compounding.converged_strategy_factory import check_retired_trap_firewall  # noqa: E402
+from sota_compounding.gpu_accelerator import (  # noqa: E402
+    configure_rtx4090_torch_backend,
+    resolve_fast_prewall_lake_root,
+)
 from sota_compounding.lifecycle import ADR0022_MAX_STOP_PCT, STUDY_WALL_DATE  # noqa: E402
 
 H105_ID = "H105_SEC_8K_PIT_EPISODIC_PIVOT_DF10_DF6_RTX4090_CPCV"
@@ -65,13 +69,15 @@ def run_h105_sec_8k_ep(
     if not ok_fw:
         raise RuntimeError(f"H105 blocked by Retired-Trap Firewall: {fw_viol}")
 
+    configure_rtx4090_torch_backend()
+    read_root, _fast_tier = resolve_fast_prewall_lake_root(lake_root)
     con = duckdb.connect()
     con.execute("PRAGMA threads=32")
-    df10_p = str(lake_root / "derived" / "df10_daily_20d_baselines.parquet")
-    df6_p = str(lake_root / "derived" / "df6_regsho_threshold_pit.parquet")
-    sec_p = str(lake_root / "derived" / "sec_filings_clean_prewall.parquet")
-    sym_p = str(lake_root / "public-tables" / "sec_symbols.parquet")
-    sv_p = str(lake_root / "public-tables" / "short_volume.parquet")
+    df10_p = str(read_root / "derived" / "df10_daily_20d_baselines.parquet")
+    df6_p = str(read_root / "derived" / "df6_regsho_threshold_pit.parquet")
+    sec_p = str(read_root / "derived" / "sec_filings_clean_prewall.parquet")
+    sym_p = str(read_root / "public-tables" / "sec_symbols.parquet")
+    sv_p = str(read_root / "public-tables" / "short_volume.parquet")
     wall_iso = STUDY_WALL_DATE.isoformat()
 
     sql = f"""
