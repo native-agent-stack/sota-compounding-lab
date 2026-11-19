@@ -90,6 +90,14 @@ from sota_compounding.symbol_ranking_v310 import (
     SYMBOL_RANKING_V310_SCHEMA,
     evaluate_df12_bitemporal_symbol_ranking_handoff,
 )
+from sota_compounding.tca_queue_parity import (
+    TCA_QUEUE_PARITY_SCHEMA,
+    LivePaperTcaObservation,
+    QueueParityBaseline,
+    compute_hlz_t_hurdle,
+    reconcile_fleet_parity,
+    reconcile_live_vs_sim_parity,
+)
 
 __all__ = [
     "ADR0022_MAX_STOP_PCT",
@@ -117,6 +125,7 @@ __all__ = [
     "STARRED_FRAMEWORK_ADAPTERS",
     "STUDY_WALL_DATE",
     "SYMBOL_RANKING_V310_SCHEMA",
+    "TCA_QUEUE_PARITY_SCHEMA",
     "BitemporalReceiptSidecarSpec",
     "BrokerStrategyManifest",
     "CompoundingReflectionDigest",
@@ -126,10 +135,12 @@ __all__ = [
     "FirstHandIncentiveScore",
     "H099PrewallReadinessReceipt",
     "LifecycleEvaluation",
+    "LivePaperTcaObservation",
     "MoverRankingEvaluation",
     "PaperExecutionMetrics",
     "PitFeedCheckResult",
     "PrewallBacktestMetrics",
+    "QueueParityBaseline",
     "SecPrewallFilterResult",
     "ShortInterestPrewallFilterResult",
     "SimStageMetrics",
@@ -142,6 +153,7 @@ __all__ = [
     "classify_bjzz_dark_pool_print",
     "classify_execution_quality_tier",
     "compute_df10_same_clock_baseline",
+    "compute_hlz_t_hurdle",
     "compute_sota_mover_ranking",
     "configure_rtx4090_torch_backend",
     "convert_sip_round_lots_to_shares",
@@ -157,6 +169,8 @@ __all__ = [
     "gpu_score_mover_feature_matrix",
     "hlz_dynamic_t_hurdle",
     "quantize_nms_stop",
+    "reconcile_fleet_parity",
+    "reconcile_live_vs_sim_parity",
     "reflect_and_finetune_batch",
     "resolve_fast_prewall_lake_root",
     "scaffold_converged_strategy",
