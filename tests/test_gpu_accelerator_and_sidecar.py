@@ -35,7 +35,7 @@ def test_configure_rtx4090_torch_backend_is_safe_and_complete() -> None:
     assert "backends" in info and isinstance(info["backends"], dict)
 
 
-def test_resolve_fast_prewall_lake_root_prefers_verified_shm_then_ext4_then_canonical(
+def test_resolve_fast_prewall_lake_root_prefers_durable_ext4_then_shm_then_canonical(
     tmp_path: pathlib.Path,
 ) -> None:
     canon = tmp_path / "canon"
@@ -45,16 +45,21 @@ def test_resolve_fast_prewall_lake_root_prefers_verified_shm_then_ext4_then_cano
     _make_fake_lake(ext4, manifest_tag="lock-1", df10_body=b"exact-bytes")
     _make_fake_lake(shm, manifest_tag="lock-1", df10_body=b"exact-bytes")
 
+    # Default prefers durable native_ext4 (Z: VHDX) to avoid redundant /dev/shm RAM duplication
     chosen, tier = resolve_fast_prewall_lake_root(canon, shm_mirror=shm, ext4_mirror=ext4)
-    assert chosen == shm and tier == "ramdisk_shm"
+    assert chosen == ext4 and tier == "native_ext4"
 
-    # Mismatched shm manifest/size MUST fail over safely to verified ext4
-    _make_fake_lake(shm, manifest_tag="stale", df10_body=b"exact-bytes")
+    # Explicit opt-in prefers ramdisk_shm when requested
+    chosen_shm, tier_shm = resolve_fast_prewall_lake_root(canon, shm_mirror=shm, ext4_mirror=ext4, prefer_shm=True)
+    assert chosen_shm == shm and tier_shm == "ramdisk_shm"
+
+    # Mismatched ext4 manifest/size MUST fail over safely to verified shm
+    _make_fake_lake(ext4, manifest_tag="stale", df10_body=b"exact-bytes")
     chosen2, tier2 = resolve_fast_prewall_lake_root(canon, shm_mirror=shm, ext4_mirror=ext4)
-    assert chosen2 == ext4 and tier2 == "native_ext4"
+    assert chosen2 == shm and tier2 == "ramdisk_shm"
 
-    # Mismatched ext4 MUST fail back safely to canonical
-    _make_fake_lake(ext4, manifest_tag="lock-1", df10_body=b"corrupt")
+    # Mismatched shm MUST fail back safely to canonical
+    _make_fake_lake(shm, manifest_tag="lock-1", df10_body=b"corrupt")
     chosen3, tier3 = resolve_fast_prewall_lake_root(canon, shm_mirror=shm, ext4_mirror=ext4)
     assert chosen3 == canon and tier3 == "canonical"
 

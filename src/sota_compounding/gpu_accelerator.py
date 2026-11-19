@@ -129,16 +129,18 @@ def resolve_fast_prewall_lake_root(
     *,
     shm_mirror: pathlib.Path | None = pathlib.Path("/dev/shm/prewall-lake"),
     ext4_mirror: pathlib.Path | None = None,
+    prefer_shm: bool = False,
 ) -> tuple[pathlib.Path, str]:
-    """Select the fastest verified pre-wall lake tier (`/dev/shm` -> native `ext4` -> `canonical_root`)."""
+    """Select the fastest verified pre-wall lake tier (durable `native_ext4` on Z: -> `ramdisk_shm` -> `canonical`)."""
     canon_sig = _manifest_file_signatures(canonical_root)
     if ext4_mirror is None:
         ext4_mirror = pathlib.Path.home() / "sota-data-ext4" / "prewall-lake"
 
-    candidates: list[tuple[pathlib.Path | None, str]] = [
-        (shm_mirror, "ramdisk_shm"),
-        (ext4_mirror, "native_ext4"),
-    ]
+    candidates: list[tuple[pathlib.Path | None, str]] = (
+        [(shm_mirror, "ramdisk_shm"), (ext4_mirror, "native_ext4")]
+        if prefer_shm
+        else [(ext4_mirror, "native_ext4"), (shm_mirror, "ramdisk_shm")]
+    )
     for cand_path, tier in candidates:
         if cand_path is None:
             continue

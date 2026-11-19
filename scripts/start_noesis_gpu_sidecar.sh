@@ -33,6 +33,9 @@ if [ -f "${PID_FILE}" ]; then
   rm -f "${PID_FILE}"
 fi
 
+# Idempotent zero-copy-if-fresh sync of pre-wall lake to durable Z: ext4 tier
+"${PY_BIN}" "${REPO_DIR}/scripts/sync_prewall_lake_fast_tier.py" --to-ext4 --no-sha >/dev/null 2>&1 || true
+
 export PYTHONPATH="${REPO_DIR}/src:${PYTHONPATH:-}"
 nohup "${PY_BIN}" -u -m sota_compounding.gpu_scoring_sidecar \
   --host "${HOST}" \
