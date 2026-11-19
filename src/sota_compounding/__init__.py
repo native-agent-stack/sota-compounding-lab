@@ -1,5 +1,13 @@
 """SOTA 5-Stage Quantitative Strategy Compounding & Paper-Broker Manifest Engine."""
 
+from sota_compounding.bitemporal_sidecar import (
+    BITEMPORAL_SIDECAR_SCHEMA,
+    CONSERVATIVE_SIP_LATENCY_BOUND_MS,
+    BitemporalReceiptSidecarSpec,
+    build_h099_bitemporal_replay_contract,
+    derive_conservative_sip_receipt_ns,
+    validate_prewall_bitemporal_partition_contract,
+)
 from sota_compounding.lifecycle import (
     ADR0022_MAX_STOP_PCT,
     ALPACA_PAPER_MAX_RPM,
@@ -47,13 +55,16 @@ __all__ = [
     "ADR0022_MAX_STOP_PCT",
     "ALPACA_PAPER_MAX_RPM",
     "ARCHETYPES",
+    "BITEMPORAL_SIDECAR_SCHEMA",
     "CANONICAL_12_RANKING_FEEDS",
     "CANONICAL_7_PIT_FEEDS",
+    "CONSERVATIVE_SIP_LATENCY_BOUND_MS",
     "DF10_TO_DF12_FEEDS",
     "IBKR_PAPER_MAX_MSG_PER_MIN",
     "RANKING_AND_DATAFEEDS_SCHEMA",
     "STUDY_WALL_DATE",
     "SYMBOL_RANKING_V310_SCHEMA",
+    "BitemporalReceiptSidecarSpec",
     "BrokerStrategyManifest",
     "EmpiricalBayesTuningResult",
     "FirstHandIncentiveScore",
@@ -63,10 +74,12 @@ __all__ = [
     "PitFeedCheckResult",
     "PrewallBacktestMetrics",
     "SimStageMetrics",
+    "build_h099_bitemporal_replay_contract",
     "classify_bjzz_dark_pool_print",
     "classify_execution_quality_tier",
     "compute_sota_mover_ranking",
     "convert_sip_round_lots_to_shares",
+    "derive_conservative_sip_receipt_ns",
     "evaluate_df12_bitemporal_symbol_ranking_handoff",
     "evaluate_first_hand_incentive",
     "evaluate_full_lifecycle",
@@ -78,4 +91,5 @@ __all__ = [
     "tune_empirical_bayes_ucb",
     "validate_converged_strategy_template",
     "validate_pit_datafeed_observation",
+    "validate_prewall_bitemporal_partition_contract",
 ]
