@@ -20,15 +20,14 @@ import json
 import math
 from dataclasses import dataclass
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from sota_compounding.lifecycle import STUDY_WALL_DATE
+from sota_compounding.symbol_ranking_v310 import _to_ny_datetime
 
 BITEMPORAL_SIDECAR_SCHEMA = "sota-bitemporal-receipt-sidecar.v1"
 CONSERVATIVE_SIP_LATENCY_BOUND_MS: float = 500.0
 MIN_CONSERVATIVE_LATENCY_BOUND_MS: float = 50.0
 MAX_CONSERVATIVE_LATENCY_BOUND_MS: float = 5_000.0
-NY_TZ = ZoneInfo("America/New_York")
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,7 +95,7 @@ def validate_prewall_bitemporal_partition_contract(
         violations.append(f"INVALID_MAX_EVENT_TS_NS:{max_event_ts_ns!r}")
     else:
         try:
-            ev_dt_ny = dt.datetime.fromtimestamp(max_event_ts_ns / 1_000_000_000.0, tz=dt.UTC).astimezone(NY_TZ)
+            ev_dt_ny = _to_ny_datetime(dt.datetime.fromtimestamp(max_event_ts_ns // 1_000_000_000, tz=dt.UTC))
             if ev_dt_ny.date() > STUDY_WALL_DATE:
                 violations.append(f"PREWALL_CUTOFF_BREACH:{ev_dt_ny.date().isoformat()}>{STUDY_WALL_DATE.isoformat()}")
         except (OverflowError, OSError, ValueError):
