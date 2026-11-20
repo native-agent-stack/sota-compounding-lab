@@ -16,3 +16,8 @@ Following `ADR-0007` (`dirhash` snapshot locks, `56`-thread `Noesis` `CPCV` offl
    - Stage-3/4 Paper strategies (`sota-mover-ranker` `ADR-0011` `:8787` and `sota-dynamic-trail-c` `ADR-0010` `:8799`) promote `50/50` Core-Harvest + `+8 bps` breakeven-floored Runner Convexity strictly after green Gain-Lock arming, accruing clean post-wall (`> 2026-10-15`) `PostWallCohortLedger` fills toward `N >= 30` (`Stage 3`) and `N >= 250` (`Stage 5` Empirical-Bayes).
 2. **`cc-lead` Central 5-Channel Multi-Runtime Orchestration & Cross-OS `15/15` Parity (`v3.5.0`):**
    - Bind Stage-1..5 research and promotion workflows to the `14`-workflow `v3.5.0` suite (`cc_lead_multi_runtime_workers_workflow.py` `#14` + `org_compounding_promotion_workflow.py` `#5`), enforcing `oneModelPerConversation = true` (`claude-fable-5-2` `xhigh` + `OMC` Runtime v2), `>= 3` concrete frontier vendors (`anthropic`, `openai`, `google`) plus non-GPT `kimi-k3.1-pro` `Hephaestus`, cross-OS `darwin`/`win32` `15/15` binary parity across `Mac M5 Max` and `Noesis`, and dynamic HLZ multiplicity accounting (`N = 89 -> t*(90) = 4.1735`, `52` compiled `E1–E4` lessons).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `src/sota_compounding/lifecycle.py`, `src/sota_compounding/strategy_template.py`, `scripts/org_visibility_doctor.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

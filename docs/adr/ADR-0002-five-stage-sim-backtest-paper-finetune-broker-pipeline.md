@@ -17,3 +17,8 @@ Enforce a sequential 5-stage state machine in `evaluate_full_lifecycle`:
 3. **`PAPER_EXECUTION`:** Pure `REAL_BROKER_ONLY` paper fills (`>= 30` closed round-trips across `>= 10` sessions with positive realized `R`).
 4. **`EMPIRICAL_BAYES_FINETUNE`:** Shrunk `eb_r` + UCB priority weight (`[0.40, 1.65]`) with realized-`R` damping on losing lanes (`stop_atr_mult <= 1.98`).
 5. **`BROKER_MANIFEST_EXPORT`:** SHA-256 signed JSON manifest targeting sanctioned paper venues only.
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `src/sota_compounding/lifecycle.py`, `tests/test_compounding_lifecycle.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

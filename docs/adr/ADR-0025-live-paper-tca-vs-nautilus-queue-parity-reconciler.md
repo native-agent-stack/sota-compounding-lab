@@ -103,3 +103,8 @@ Signed zero is canonicalized (`-0.0 -> 0.0`) on validated and rounded floats, so
 
 - `uv run pytest tests/test_adr0025_tca_queue_parity.py -q`: unit tests for `PARITY_GREEN`, `DRIFT_WARN`, `THROTTLE_RED`, exact float boundaries, post-wall rejection, `NaN`/`Inf` rejection, live-lane refusal, fleet aggregation and permutation invariance, and SHA-256 determinism. Hypothesis properties cover EB convex-combination bounds, monotonic slippage-drift degradation and a non-decreasing HLZ hurdle.
 - `uv run pytest -q`, `uv run ruff check src scripts tests`, `uv run ruff format --check src scripts tests`, `python scripts/architecture_catalog.py --check`.
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `src/sota_compounding/tca_queue_parity.py`, `tests/test_adr0025_tca_queue_parity.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

@@ -17,3 +17,8 @@
 ## Verification
 
 - `python scripts/architecture_catalog.py --check`, `ruff check .`, `pytest -q` (`58 passed`), and `gitleaks` (`0` leaks).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `src/sota_compounding/lifecycle.py`, `tests/test_compounding_lifecycle.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

@@ -25,3 +25,8 @@ After consolidating all 8 trading-engine repositories, 18 pinned upstream librar
 ## Verification
 
 - `python scripts/architecture_catalog.py --check`, `ruff check .`, `ty check src/sota_compounding`, `pytest -q`, `python scripts/org_visibility_doctor.py`, and `gitleaks git --no-banner` (`0` leaks).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `src/sota_compounding/converged_strategy_factory.py`, `tests/test_converged_strategy_factory.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

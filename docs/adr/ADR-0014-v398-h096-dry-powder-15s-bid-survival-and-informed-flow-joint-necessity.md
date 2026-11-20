@@ -18,3 +18,8 @@
 ## Verification
 
 - `python scripts/architecture_catalog.py --check`, `ruff check .`, `pytest -q` (`57 passed`), and `gitleaks` (`0` leaks).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** E4
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

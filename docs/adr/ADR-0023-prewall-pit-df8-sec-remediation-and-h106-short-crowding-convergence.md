@@ -29,3 +29,8 @@ Read-only Lane 04/05 PIT audits (`sota-bus` `#299` / `#300`) and adversarial fal
 ## Verification
 
 - Adversarial `sota-falsifier` audit + delta pass, `ruff check --no-cache src scripts tests`, `pytest -q` (Win32 + WSL `.venv`), `python scripts/architecture_catalog.py --check` (`23/23` MADR ADRs), and `gitleaks` (`0` leaks).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `src/sota_compounding/prewall_h099_enrichment.py`, `scripts/materialize_prewall_df10_df6.py`, `scripts/run_h106_df8_short_crowding_xsec.py`, `tests/test_prewall_h099_enrichment.py`, `tests/test_prewall_optb_factory.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

@@ -20,3 +20,8 @@ An adversarial cross-repo E2E audit (`cc-lead-e2e-review` `#291`/`#292`) surface
 ## Verification
 
 - `python scripts/architecture_catalog.py --write && python scripts/architecture_catalog.py --check`, `ruff check .`, `pytest -q`, and `gitleaks git --no-banner` (`0` leaks).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `src/sota_compounding/symbol_ranking_v310.py`, `tests/test_symbol_ranking_v310.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

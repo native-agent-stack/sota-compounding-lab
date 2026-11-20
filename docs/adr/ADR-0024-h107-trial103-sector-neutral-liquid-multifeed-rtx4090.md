@@ -22,3 +22,8 @@ Following `H106` (`Trial #102`, broad universe `-13.26 bps` `1x` / `-30.24 bps` 
 ## Verification
 
 - `pytest -q tests/test_h107_sector_neutral_rtx4090.py` (`3 passed` on `Noesis-Carbon` `.venv`), `ruff check` & `ruff format --check src scripts tests`, `scripts/architecture_catalog.py --check` (`24/24`), `scripts/org_visibility_doctor.py --offline`, and `gitleaks protect --staged --no-banner` (`0` leaks).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `scripts/run_h107_sector_neutral_liquid_multifeed_rtx4090.py`, `tests/test_h107_sector_neutral_rtx4090.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

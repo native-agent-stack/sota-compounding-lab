@@ -16,3 +16,8 @@ Live `1,018`-order RTH attribution showed `POST_VIX_REVERSAL_MAJOR_GROWTH_THRUST
 ## Verification
 
 - `python scripts/architecture_catalog.py --check`, `ruff check .`, `pytest -q`, and `gitleaks` (`0` leaks).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `src/sota_compounding/lifecycle.py`, `tests/test_compounding_lifecycle.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

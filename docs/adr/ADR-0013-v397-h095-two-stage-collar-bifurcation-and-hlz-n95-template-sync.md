@@ -18,3 +18,8 @@
 ## Verification
 
 - `python scripts/architecture_catalog.py --check`, `ruff check .`, `pytest -q` (`56 passed`), and `gitleaks git --staged --no-banner` (`0` leaks).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `templates/sota_converged_strategy.template.json`, `src/sota_compounding/strategy_template.py`, `tests/test_strategy_template.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.

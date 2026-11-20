@@ -18,3 +18,8 @@ Following `ADR-0008` (`v3.5.0` `cc-lead` 14-workflow hub and `H088`/`H089` `50/5
    - `CLIMAX_VWAP_MEAN_REVERSION` and `SOTA_DUAL_CLIMAX_STOP_AND_REVERSE` candidates must satisfy `min_ofi_pct` and bar `min_close_pos` selectivity even when sub-penny dark-pool share `inst_dp >= 35%`, and cold reversals must compete on normalized `[0..100] * ucb_priority_weight` scale rather than bypassing `UCB` leader allocation.
 2. **Bind `57+` Root-Cause Lessons, `89` HLZ Trials (`t*(90) = 4.1735`) & 3-Surface (`Mac M5 Max` / `Noesis` Win32 / `Noesis-Carbon` ext4) Parity:**
    - Stage-3 (`>= 30` post-wall Paper round-trips across `>= 10` sessions) and Stage-5 (`>= 250` `PostWallCohortLedger` trades) promotion gates remain strictly enforced on post-`ADR-0012/0013` share-lot FIFO cohorts while heavy `CPCV` backtests execute on `Noesis-Carbon` ext4 (`singleActiveBrokerHostOnly = true` on `Mac M5 Max`).
+
+## Verification Witness
+
+- **Cataloged Implementation & Test Artifacts:** `src/sota_compounding/lifecycle.py`, `scripts/org_visibility_doctor.py`, `scripts/architecture_catalog.py`
+- **Deterministic Gates:** Verified by `scripts/architecture_catalog.py --check`, `scripts/merge_gate.py` (`UPSTREAM.md` + `upstream-map.toml` + `18` shelf pins), and `pytest -q`.
