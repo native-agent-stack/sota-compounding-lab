@@ -1425,3 +1425,84 @@ def render_upstream_lib_e2e_markdown(manifest: Mapping[str, Any]) -> str:
         )
     lines.append("")
     return "\n".join(lines)
+
+
+TIER0_FORBIDDEN_NON_SOTA_SIM_UPSTREAMS: frozenset[str] = frozenset(
+    {
+        "",
+        "cpython-stdlib",
+        "stdlib",
+        "custom",
+        "self-built",
+        "self-invented",
+        "homegrown",
+        "ad-hoc",
+    }
+)
+
+TIER0_PURGED_SELF_INVENTED_SIM_STRATEGIES: frozenset[str] = frozenset(
+    {
+        "WAVE2_HIGH_VOLUME_REENTRY",
+        "BLIND_WAVE2_REENTRY",
+        "RAPID_WAVE2_REENTRY_STRESS",
+        "IBKR_P4_DISCIPLINED_WAVE2_PULLBACK",
+        "FLOW_VELOCITY_CAPITAL_RECYCLE",
+        "DEAD_FLOW_CAPITAL_RECYCLED_FOR_HIGH_VELOCITY_MOVER",
+        "SOTA_DUAL_CLIMAX_STOP_AND_REVERSE",
+        "ATOMIC_DUAL_CLIMAX_STOP_AND_REVERSE_FLIP",
+        "SOTA_DUAL_EXTREME_BALANCE_BREAK_EARLY",
+        "POST_VIX_REVERSAL",
+        "POST_VIX_REVERSAL_MAJOR_GROWTH_THRUST",
+        "VIX_REGIME_ETB_VWAP_FAIL_SHORT",
+        "ADR0033_CHAMPION_SPIKE_SHORT",
+        "S14_SOTA_EARLY_MOVER_BRACKET",
+        "AD_HOC_EXT_SPREAD_CROSSING_COLLAR",
+    }
+)
+
+
+def enforce_tier0_sota_source_only_sim_gate(
+    *,
+    strategy_id: str,
+    upstream_repo: str,
+    upstream_pin_sha: str,
+    primary_literature: str,
+) -> dict[str, Any]:
+    """Fail-closed Tier-0 SOTA-Source-Only Sim gate (`ADR-0037`): ZERO self-built/self-invented strategies."""
+    sid = str(strategy_id or "").strip().upper()
+    repo = str(upstream_repo or "").strip()
+    pin = str(upstream_pin_sha or "").strip()
+    lit = str(primary_literature or "").strip()
+    reasons: list[str] = []
+
+    pinned_repos = {
+        str(entry["repo"])
+        for tier_entries in SOTA_UPSTREAM_BACKTEST_PLATFORMS.values()
+        for entry in tier_entries
+        if isinstance(entry, Mapping) and entry.get("repo")
+    } | {"finra-sec-official-spec"}
+
+    if not sid:
+        reasons.append("TIER0_EMPTY_STRATEGY_ID")
+    if sid in TIER0_PURGED_SELF_INVENTED_SIM_STRATEGIES or is_post_ant_strategy_quarantined(sid):
+        reasons.append(f"TIER0_PURGED_SELF_INVENTED_OR_QUARANTINED:{sid}")
+    if repo.lower() in TIER0_FORBIDDEN_NON_SOTA_SIM_UPSTREAMS:
+        reasons.append(f"TIER0_FORBIDDEN_NON_SOTA_UPSTREAM:{repo}")
+    elif repo not in pinned_repos:
+        reasons.append(f"TIER0_UNPINNED_SIM_UPSTREAM_REPO:{repo}")
+    if len(pin) < 6:
+        reasons.append("TIER0_MISSING_UPSTREAM_PIN_SHA")
+    if len(lit) < 20:
+        reasons.append("TIER0_MISSING_PRIMARY_LITERATURE")
+
+    allowed = len(reasons) == 0
+    return {
+        "schema": "sota.tier0-sim-sota-source-only-gate.v1",
+        "adr": "ADR-0037",
+        "strategy_id": sid,
+        "allowed": allowed,
+        "upstream_repo": repo,
+        "upstream_pin_sha": pin,
+        "primary_literature": lit,
+        "rejection_reasons": reasons,
+    }
