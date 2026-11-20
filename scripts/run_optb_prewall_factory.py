@@ -41,12 +41,20 @@ from sota_compounding.prewall_h099_enrichment import (  # noqa: E402
     CANONICAL_SEC_SHELF_DILUTION_FORMS,
     audit_h099_prewall_lake_readiness,
 )
+from sota_compounding.ranking_and_datafeeds import CTA_UTP_ROUND_LOT_SHARES  # noqa: E402
 
 EFFECTIVE_HLZ_FLOOR: float = 4.2019
 MIN_DSR_PROBABILITY: float = 0.95
 MIN_CPCV_POSITIVE_SHARE: float = 0.80
 MAX_PBO: float = 0.30
 DEFAULT_POSITION_NOTIONAL_USD: float = 50_000.0
+ALPACA_QUOTE_SIZE_SHARES_CUTOVER_UTC_NS = (dt.date(2025, 11, 3) - dt.date(1970, 1, 1)).days * 86_400 * 10**9
+
+
+def normalize_alpaca_quote_size_to_shares(raw_size: float, ts_ns: int) -> float:
+    """Convert historical SIP quote depth using the exchange timestamp, in Unix nanoseconds."""
+    shares_per_unit = CTA_UTP_ROUND_LOT_SHARES if ts_ns < ALPACA_QUOTE_SIZE_SHARES_CUTOVER_UTC_NS else 1.0
+    return raw_size * shares_per_unit
 
 
 def compute_almgren_chriss_cost_bps(
@@ -835,7 +843,7 @@ def _replay_one_orb_slice_hftbacktest(args: tuple[str, str, str, str, float, boo
             ts_v,
             ts_v + lat_ns,
             float(sq_bp[i]),
-            float(sq_bs[i]) * 100.0,
+            normalize_alpaca_quote_size_to_shares(float(sq_bs[i]), ts_v),
             0,
             0,
             0.0,
@@ -846,7 +854,7 @@ def _replay_one_orb_slice_hftbacktest(args: tuple[str, str, str, str, float, boo
             ts_v,
             ts_v + lat_ns,
             float(sq_ap[i]),
-            float(sq_as[i]) * 100.0,
+            normalize_alpaca_quote_size_to_shares(float(sq_as[i]), ts_v),
             0,
             0,
             0.0,

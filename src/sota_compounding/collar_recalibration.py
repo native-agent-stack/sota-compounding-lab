@@ -7,7 +7,7 @@ import re
 import sqlite3
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, fields, replace
 from datetime import UTC, date, datetime, timedelta
 from fractions import Fraction
 from types import MappingProxyType
@@ -26,6 +26,7 @@ from .tca_queue_parity import (
     _require_finite_real,
     _require_label,
     _require_prewall_date,
+    _round_derived,
 )
 
 COLLAR_RECALIBRATION_SCHEMA = "sota.collar-recalibration.v1"
@@ -41,6 +42,8 @@ _PREWALL_SOURCES = frozenset({"PRE_WALL_HISTORICAL", "PRE_WALL_SIMULATION"})
 
 def _instant_ns(value: datetime | str | int) -> int:
     if type(value) is int:
+        if 0 < value < 10**17:
+            raise ValueError("ambiguous integer timestamp: supply Unix nanoseconds or an explicit-offset timestamp")
         return value
     fraction_ns = 0
     if isinstance(value, str):
@@ -265,6 +268,36 @@ def _json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
+def _input_value(value: Any, *, preserve_zero_sign: bool = False) -> Any:
+    """Encode even nonfinite observations for identity without allowing nonfinite receipt JSON."""
+    if isinstance(value, float):
+        return {"float": (value if preserve_zero_sign else value or 0.0).hex()}
+    if isinstance(value, SessionBlock):
+        weights = _input_value(value.fill_weights)
+        if isinstance(weights, list):
+            weights.sort(key=_json)
+        return {"session_block": [_input_value(value.session_date), weights, _input_value(value.slippage_drift_bps)]}
+    if isinstance(value, Mapping):
+        return {
+            "mapping": {key: _input_value(child, preserve_zero_sign=preserve_zero_sign) for key, child in value.items()}
+        }
+    if isinstance(value, (list, tuple)):
+        return [_input_value(child, preserve_zero_sign=preserve_zero_sign) for child in value]
+    return value
+
+
+def _input_sha256(epoch: CollarEpoch, fleet: Mapping[str, Any]) -> str:
+    payload = {f.name: _input_value(getattr(epoch, f.name)) for f in fields(epoch) if f.name != "stratum"}
+    payload["stratum"] = asdict(epoch.stratum)
+    if isinstance(payload["blocks"], list):
+        payload["blocks"].sort(key=_json)
+    # Preserve the numeric representation covered by the producer's checksums.
+    fleet_payload = _input_value(fleet, preserve_zero_sign=True)
+    if isinstance(fleet, Mapping) and isinstance(rows := fleet_payload["mapping"].get("rows"), list):
+        rows.sort(key=_json)
+    return _canonical_sha256({"epoch": payload, "fleet": fleet_payload})
+
+
 def _read_decision(body: str) -> CollarDecision:
     fields = json.loads(body)
     digest = fields.pop("receipt_sha256")
@@ -353,7 +386,10 @@ def _evaluate(
         return result
     ess = effective_sample_size(weights, epoch.rho_u)
     result.n_eff = float(ess)
-    signs = [_require_finite_real(b.slippage_drift_bps, "block drift") > 10.0 for b in epoch.blocks]
+    signs = [
+        _round_derived(_require_finite_real(b.slippage_drift_bps, "block drift"), "block drift") > 10.0
+        for b in epoch.blocks
+    ]
     p, alpha = session_sign_test(sum(signs), len(signs), epoch.epoch_index)
     result.p = float(p)
     if dates:
@@ -401,7 +437,9 @@ class CollarLedger:
                 UNIQUE(stream, version))""")
             connection.execute("""CREATE TABLE IF NOT EXISTS collar_decisions (
                 stream TEXT NOT NULL, k INTEGER NOT NULL, receipt_id TEXT NOT NULL, decision TEXT NOT NULL,
-                PRIMARY KEY(stream, k), UNIQUE(stream, receipt_id))""")
+                input_sha256 TEXT, PRIMARY KEY(stream, k), UNIQUE(stream, receipt_id))""")
+            if "input_sha256" not in {row[1] for row in connection.execute("PRAGMA table_info(collar_decisions)")}:
+                connection.execute("ALTER TABLE collar_decisions ADD COLUMN input_sha256 TEXT")
             connection.execute("""CREATE TABLE IF NOT EXISTS collar_lane_steps (
                 lane TEXT NOT NULL, session_date TEXT NOT NULL, PRIMARY KEY(lane, session_date))""")
 
@@ -445,20 +483,22 @@ class CollarLedger:
             )
 
     def consume(self, epoch: CollarEpoch, fleet: Mapping[str, Any]) -> CollarDecision:
-        """Consume one prospective epoch. Duplicate IDs return the originally committed decision."""
+        """Consume one prospective epoch, or return a prior decision for an identical request."""
         if not isinstance(epoch, CollarEpoch) or not isinstance(epoch.stratum, CollarStratum):
             raise ValueError("expected an epoch bound to a validated paper stratum")
         scope = epoch.stratum
         _require_label(epoch.epoch_receipt_id, "epoch_receipt_id")
         with self._transaction():
             prior = self._db.execute(
-                "SELECT decision FROM collar_decisions WHERE stream=? AND receipt_id=?",
+                "SELECT decision, input_sha256 FROM collar_decisions WHERE stream=? AND receipt_id=?",
                 (scope.stream, epoch.epoch_receipt_id),
             ).fetchone()
             if prior:
                 saved = _read_decision(prior[0])
                 if saved.stratum != scope:
                     raise ValueError("receipt belongs to another policy version")
+                if prior[1] is None or prior[1] != _input_sha256(epoch, fleet):
+                    raise ValueError("receipt payload differs or its original input checksum is unavailable")
                 return saved
             active = self._active(scope.stream)
             if not active or active[0] != scope.collar_version:
@@ -514,7 +554,7 @@ class CollarLedger:
             del payload["receipt_sha256"]
             decision = replace(decision, receipt_sha256=_canonical_sha256(payload))
             self._db.execute(
-                "INSERT INTO collar_decisions VALUES (?, ?, ?, ?)",
-                (scope.stream, k, epoch.epoch_receipt_id, _json(asdict(decision))),
+                "INSERT INTO collar_decisions (stream, k, receipt_id, decision, input_sha256) VALUES (?, ?, ?, ?, ?)",
+                (scope.stream, k, epoch.epoch_receipt_id, _json(asdict(decision)), _input_sha256(epoch, fleet)),
             )
             return decision

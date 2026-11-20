@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import sys
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from hypothesis import given
@@ -21,9 +24,70 @@ from run_h106_df8_short_crowding_xsec import (
 )
 from run_optb_prewall_factory import (
     EFFECTIVE_HLZ_FLOOR,
+    _replay_one_orb_slice_hftbacktest,
     compute_almgren_chriss_cost_bps,
     evaluate_strict_prewall_gate,
+    normalize_alpaca_quote_size_to_shares,
 )
+
+
+def test_historical_quote_sizes_change_units_at_utc_midnight():
+    boundary = int(dt.datetime(2025, 11, 3, tzinfo=dt.UTC).timestamp()) * 10**9
+    for ts, bid, ask in (
+        (boundary - 1, 300, 700),
+        (boundary, 3, 7),
+        (boundary + 1, 3, 7),
+        (boundary + 5 * 3600 * 10**9, 3, 7),
+    ):
+        assert normalize_alpaca_quote_size_to_shares(3, ts) == bid
+        assert normalize_alpaca_quote_size_to_shares(7, ts) == ask
+
+
+def test_queue_replay_emits_bid_and_ask_shares_using_each_exchange_timestamp(monkeypatch):
+    np = pytest.importorskip("numpy")
+    pa = pytest.importorskip("pyarrow")
+    parquet = pytest.importorskip("pyarrow.parquet")
+    boundary = int(dt.datetime(2025, 11, 3, tzinfo=dt.UTC).timestamp()) * 10**9
+    times = boundary + np.arange(-80, 40, dtype=np.int64) * 10**9
+    times[79] = boundary - 1  # feed latency puts this quote's local timestamp after the cutover
+    n = len(times)
+    tables = {
+        "quotes": pa.table({"t_ns": times, "bp": [10.0] * n, "ap": [10.01] * n, "bs": [3] * n, "as": [7] * n}),
+        "trades": pa.table({"t_ns": times, "p": [10.01] * n, "s": [13] * n, "x": ["X"] * n}),
+    }
+    monkeypatch.setattr(parquet, "read_table", lambda path, columns: tables[path].select(columns))
+    event_dtype = np.dtype(
+        [
+            (name, kind)
+            for name, kind in zip(
+                ("flags", "exch_ts", "local_ts", "px", "qty", "id", "aux", "value"),
+                ("i8", "i8", "i8", "f8", "f8", "i8", "i8", "f8"),
+                strict=True,
+            )
+        ]
+    )
+    asset = Mock()
+    asset.data.side_effect = StopIteration("captured replay input")
+    engine = SimpleNamespace(
+        EXCH_EVENT=1,
+        LOCAL_EVENT=2,
+        DEPTH_EVENT=4,
+        TRADE_EVENT=8,
+        BUY_EVENT=16,
+        SELL_EVENT=32,
+        GTC=0,
+        LIMIT=0,
+        event_dtype=event_dtype,
+        BacktestAsset=lambda: asset,
+        HashMapMarketDepthBacktest=None,
+    )
+    monkeypatch.setitem(sys.modules, "hftbacktest", engine)
+    _replay_one_orb_slice_hftbacktest(("trades", "quotes", "fixture", "2025-11-03", 5e6, False))
+    asset.data.assert_called_once()
+    events = asset.data.call_args.args[0]
+    for ts, bid, ask in ((boundary - 1, 300, 700), (boundary, 3, 7), (boundary + 10**9, 3, 7)):
+        quantities = {row["flags"]: row["qty"] for row in events[events["exch_ts"] == ts]}
+        assert quantities == {1 | 2 | 4 | 16: bid, 1 | 2 | 4 | 32: ask, 1 | 2 | 8 | 16: 13}
 
 
 def test_prewall_date_guard_enforces_2026_10_15_cutoff() -> None:

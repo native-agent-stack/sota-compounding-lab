@@ -237,10 +237,32 @@ def test_sign_test_requires_strict_adversity_and_three_blocks_cannot_qualify():
     ep = epoch(1)
     ties = tuple(replace(b, slippage_drift_bps=10) for b in ep.blocks)
     assert db.consume(replace(ep, blocks=ties), fleet()).p_value == 1
-    ep = epoch(2)
-    blocks = tuple(replace(b, fill_weights=(1,) * 10) for b in ep.blocks[:3])
-    r = db.consume(replace(ep, blocks=blocks), fleet())
-    assert (r.n_eff, r.p_value, r.adverse_streak) == (30, 0.125, 0)
+    for k in (2, 3):
+        ep = epoch(k)
+        blocks = tuple(replace(b, fill_weights=(1,) * 10) for b in ep.blocks[:3])
+        r = db.consume(replace(ep, blocks=blocks), fleet())
+        assert (r.n_eff, r.p_value) == (30, 0.125)
+        assert (r.action, r.reason, r.c_out_bps, r.adverse_streak) == ("HOLD", "ADVERSE_UNCONFIRMED", 15.0, 0)
+
+
+def test_ten_adverse_blocks_cannot_pass_epoch_41_spending_gate():
+    db = ledger()
+    warn = fleet(drift=6)
+    for k in range(1, 41):
+        assert db.consume(epoch(k, drift=6, summary=warn), warn).reason == "DRIFT_WARN"
+    r = db.consume(epoch(41), fleet())
+    assert (r.epoch_index, r.n_eff, r.p_value, r.alpha_k) == (41, 30, 0.0009765625, 1 / (20 * 41 * 42))
+    assert (r.action, r.reason, r.c_out_bps, r.adverse_streak) == ("HOLD", "ADVERSE_UNCONFIRMED", 15.0, 0)
+
+
+@pytest.mark.parametrize(("block_drift", "p"), [(10.00000049, 1), (10.00000051, 2**-10)])
+def test_block_sign_uses_the_same_precision_as_adr0025(block_drift, p):
+    red = fleet()
+    ep = epoch(1, drift=block_drift, summary=red)
+    assert fleet(drift=block_drift)["rows"][0]["slippage_drift_bps"] == round(block_drift, 6)
+    result = ledger().consume(ep, red)
+    assert result.p_value == p
+    assert result.reason == ("ADVERSE_UNCONFIRMED" if p == 1 else "QUALIFIED_ADVERSE")
 
 
 def test_full_six_dimensional_stratum_and_lane_session_budget():
@@ -349,12 +371,84 @@ def test_canonical_receipt_ignores_row_block_weight_order_and_signed_zero():
     permuted = tuple(replace(block, fill_weights=block.fill_weights[::-1]) for block in reversed(blocks))
     r2 = b.consume(replace(ep, blocks=permuted, max_markout_lag_60s_s=0.0), fl)
     assert r1 == r2 and len(r1.receipt_sha256) == 64
+    assert a.consume(replace(ep, blocks=permuted, max_markout_lag_60s_s=0.0), fl) == r1
+
+
+def test_replay_compares_epoch_and_matched_fleet_evidence_after_restart(tmp_path):
+    path = tmp_path / "journal.sqlite"
+    ep, fl = epoch(1), fleet()
+    with closing(sqlite3.connect(path)) as conn:
+        db = CollarLedger(conn)
+        db.register(SCOPE, BASE)
+        saved = db.consume(ep, fl)
+    with closing(sqlite3.connect(path)) as conn:
+        db = CollarLedger(conn)
+        changed_row = fleet()
+        changed_row["rows"][0]["live_sample_n"] += 1  # keep its claimed row digest
+        changed_zero = fleet()
+        changed_zero["rows"][0]["fill_rate_gap_ratio"] = -0.0  # ADR-0025 checks the actual row bytes
+        for candidate, summary in (
+            (replace(ep, epoch_index=2), fl),
+            (replace(ep, stale_inputs=True), fl),
+            (replace(ep, blocks=(replace(ep.blocks[0], fill_weights=(1, 1, 2)), *ep.blocks[1:])), fl),
+            (replace(ep, parity_receipt_sha256="12" * 32), fl),
+            (replace(ep, baseline_snapshot_sha256="34" * 32), fl),
+            (ep, changed_row),
+            (ep, changed_zero),
+            (ep, fl | {"receipt_sha256": "56" * 32}),
+            (ep, fl | {"fleet_status": "PARITY_GREEN"}),
+            (ep, fl | {"halts_paper_farm": True}),
+        ):
+            with pytest.raises(ValueError, match="receipt payload"):
+                db.consume(candidate, summary)
+        assert db.consume(ep, fl) == saved
+        assert db.consume(epoch(2), fl).c_out_bps == 13
+
+
+def test_legacy_receipt_rejects_unverifiable_retry_and_preserves_spending():
+    with closing(sqlite3.connect(":memory:")) as conn:
+        conn.execute("""CREATE TABLE collar_decisions (
+            stream TEXT NOT NULL, k INTEGER NOT NULL, receipt_id TEXT NOT NULL, decision TEXT NOT NULL,
+            PRIMARY KEY(stream, k), UNIQUE(stream, receipt_id))""")
+        original = ledger().consume(epoch(1), fleet())
+        conn.execute(
+            "INSERT INTO collar_decisions VALUES (?, ?, ?, ?)",
+            (SCOPE.stream, 1, original.epoch_receipt_id, json.dumps(asdict(original))),
+        )
+        conn.commit()
+        db = CollarLedger(conn)
+        db.register(SCOPE, BASE)
+        with pytest.raises(ValueError, match="receipt payload"):
+            db.consume(epoch(1), fleet())
+        assert db.consume(epoch(2), fleet()).c_out_bps == 13
 
 
 T = "2026-10-16T04:00:00Z"
 BEFORE = "2026-10-16T03:59:59.999999999Z"
 AFTER = "2026-10-16T04:00:00.000000001Z"
 HIST = "PRE_WALL_HISTORICAL"
+
+
+def test_integer_firewall_rejects_unit_confusion_in_every_clock_and_preserves_epoch_zero():
+    validate_prewall_temporal_boundary(0, 0, HIST, receipt_ts_utc=0, decision_ts_utc=0)
+    validate_prewall_temporal_boundary(10**17, 10**17, HIST)
+    validate_prewall_temporal_boundary("1970-01-01T00:00:00.000000001Z", BEFORE, HIST)
+    with pytest.raises(ValueError, match="pre-wall interval"):
+        validate_prewall_temporal_boundary(-1, 0, HIST)
+    later = int(datetime(2026, 11, 1, tzinfo=UTC).timestamp())
+    end = int(datetime(2026, 10, 16, 4, tzinfo=UTC).timestamp()) * 10**9 - 1
+    for ambiguous in (1, later, later * 1000, later * 10**6, 10**17 - 1):
+        for clocks in (
+            (ambiguous, end, end, end),
+            (0, ambiguous, end, end),
+            (0, 0, ambiguous, end),
+            (0, 0, 0, ambiguous),
+        ):
+            ev, received, decision, maturity = clocks
+            with pytest.raises(ValueError, match="nanoseconds"):
+                validate_prewall_temporal_boundary(
+                    ev, maturity, HIST, receipt_ts_utc=received, decision_ts_utc=decision
+                )
 
 
 def test_temporal_firewall_nanoseconds_offsets_and_tagged_decisions():
@@ -421,6 +515,7 @@ def test_observations_are_finite_and_bools_are_not_numbers(value):
     ep = epoch(1)
     ep = replace(ep, max_markout_lag_60s_s=value)
     result = db.consume(ep, fleet())
+    assert db.consume(ep, fleet()) == result
     if type(value) is bool or not math.isfinite(value) or not 0 <= value <= 6:
         assert result.adverse_streak == 0 and result.action == "HOLD"
     json.dumps(asdict(result), allow_nan=False)
