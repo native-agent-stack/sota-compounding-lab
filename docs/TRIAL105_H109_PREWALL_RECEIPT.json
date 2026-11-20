@@ -1,0 +1,282 @@
+{
+  "diagnostic_combined_bifurcation": {
+    "adversarial_ex_top3_days_2x_bps": -13.27,
+    "adversarial_ex_top3_days_t_2x": -4.0947,
+    "annualized_sharpe_1x": -0.517,
+    "annualized_sharpe_2x": -2.625,
+    "calendar_day_stats_2x": {
+      "ar1_rho": -0.0133,
+      "calmar": -0.5628,
+      "cum_return_pct": -45.5409,
+      "excess_kurtosis": 0.7571,
+      "max_drawdown_pct": 47.5278,
+      "mean_daily_bps": -12.0773,
+      "profit_factor": 0.6423,
+      "sessions": 492.0,
+      "sharpe_ann_ar1_adj": -2.6601,
+      "sharpe_ann_raw": -2.625,
+      "skew": -0.4827,
+      "std_daily_bps": 73.0369
+    },
+    "conformal_pid_calibrated_stop_pct": 2.0,
+    "conformal_pid_empirical_stopout_rate": 0.0999,
+    "cpcv_5path_means_2x_bps": [
+      -12.08,
+      -12.08,
+      -12.08,
+      -12.08,
+      -12.08
+    ],
+    "cpcv_5path_positive_share": 0.0,
+    "distinct_dates": 492,
+    "dsr_probability_2x": 0.0,
+    "events": 5207,
+    "exit_reason_counts": {
+      "ADR0022_HARD_STOP": 1364,
+      "CHANDELIER_STOP": 3560,
+      "EOD_1550_FLAT": 283
+    },
+    "hansen_spa_p_value_2x": 1.0,
+    "harvest_50_rate": 0.4358,
+    "hln_mcs_included": true,
+    "hlz_t_hurdle_n105": 4.2084,
+    "hygiene_14pt_passed": true,
+    "hygiene_violations": [],
+    "label": "H109_COMBINED_BIFURCATION",
+    "mean_cost_1x_bps": 9.7,
+    "mean_gross_day_bps": 7.33,
+    "mean_net_1x_day_bps": -2.38,
+    "mean_net_1x_event_bps": -1.75,
+    "mean_net_2x_day_bps": -12.08,
+    "mean_net_2x_event_bps": -11.46,
+    "p10_trade_net_2x_bps": -220.1,
+    "p90_trade_net_2x_bps": 137.66,
+    "passed": false,
+    "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+    "subperiods": {
+      "2024Q4": {
+        "dates": 55,
+        "events": 325,
+        "mean_1x_bps": -4.86,
+        "mean_2x_bps": -14.27,
+        "t_2x_daily": -1.3067
+      },
+      "2025H1": {
+        "dates": 117,
+        "events": 870,
+        "mean_1x_bps": -1.1,
+        "mean_2x_bps": -10.7,
+        "t_2x_daily": -1.6515
+      },
+      "2025H2": {
+        "dates": 126,
+        "events": 1214,
+        "mean_1x_bps": -2.7,
+        "mean_2x_bps": -12.39,
+        "t_2x_daily": -1.7383
+      },
+      "2026_PREWALL": {
+        "dates": 194,
+        "events": 2798,
+        "mean_1x_bps": -2.23,
+        "mean_2x_bps": -12.09,
+        "t_2x_daily": -2.4716
+      }
+    },
+    "t_stat_clustered_1x_daily": -0.722,
+    "t_stat_clustered_1x_event": -0.504,
+    "t_stat_clustered_2x_daily": -3.6678,
+    "t_stat_clustered_2x_event": -3.3051,
+    "verdict": "FAILED_HLZ_OR_STAT_GATE"
+  },
+  "diagnostic_leg_b_8k_vwap_hold_long": {
+    "adversarial_ex_top3_days_2x_bps": 0.61,
+    "adversarial_ex_top3_days_t_2x": 0.1386,
+    "annualized_sharpe_1x": 1.961,
+    "annualized_sharpe_2x": 0.426,
+    "calendar_day_stats_2x": {
+      "ar1_rho": -0.0144,
+      "calmar": 0.3648,
+      "cum_return_pct": 8.6345,
+      "excess_kurtosis": 0.6242,
+      "max_drawdown_pct": 14.3135,
+      "mean_daily_bps": 2.429,
+      "profit_factor": 1.0748,
+      "sessions": 410.0,
+      "sharpe_ann_ar1_adj": 0.4324,
+      "sharpe_ann_raw": 0.4262,
+      "skew": -0.2256,
+      "std_daily_bps": 90.4762
+    },
+    "conformal_pid_calibrated_stop_pct": 0.9643,
+    "conformal_pid_empirical_stopout_rate": 0.1037,
+    "cpcv_5path_means_2x_bps": [
+      2.43,
+      2.43,
+      2.43,
+      2.43,
+      2.43
+    ],
+    "cpcv_5path_positive_share": 1.0,
+    "distinct_dates": 410,
+    "dsr_probability_2x": 0.0,
+    "events": 2025,
+    "exit_reason_counts": {
+      "ADR0022_HARD_STOP": 520,
+      "CHANDELIER_STOP": 1433,
+      "EOD_1550_FLAT": 72
+    },
+    "hansen_spa_p_value_2x": 0.2967,
+    "harvest_50_rate": 0.4741,
+    "hln_mcs_included": true,
+    "hlz_t_hurdle_n105": 4.2084,
+    "hygiene_14pt_passed": true,
+    "hygiene_violations": [],
+    "label": "H109_LEG_B_8K_VWAP_HOLD_LONG",
+    "mean_cost_1x_bps": 8.76,
+    "mean_gross_day_bps": 19.94,
+    "mean_net_1x_day_bps": 11.19,
+    "mean_net_1x_event_bps": 7.43,
+    "mean_net_2x_day_bps": 2.43,
+    "mean_net_2x_event_bps": -1.27,
+    "p10_trade_net_2x_bps": -217.36,
+    "p90_trade_net_2x_bps": 147.9,
+    "passed": false,
+    "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+    "subperiods": {
+      "2024Q4": {
+        "dates": 47,
+        "events": 201,
+        "mean_1x_bps": 30.76,
+        "mean_2x_bps": 22.08,
+        "t_2x_daily": 1.9593
+      },
+      "2025H1": {
+        "dates": 100,
+        "events": 424,
+        "mean_1x_bps": 13.03,
+        "mean_2x_bps": 4.19,
+        "t_2x_daily": 0.4657
+      },
+      "2025H2": {
+        "dates": 95,
+        "events": 479,
+        "mean_1x_bps": 13.08,
+        "mean_2x_bps": 4.33,
+        "t_2x_daily": 0.4305
+      },
+      "2026_PREWALL": {
+        "dates": 168,
+        "events": 921,
+        "mean_1x_bps": 3.54,
+        "mean_2x_bps": -5.19,
+        "t_2x_daily": -0.752
+      }
+    },
+    "t_stat_clustered_1x_daily": 2.502,
+    "t_stat_clustered_1x_event": 2.1166,
+    "t_stat_clustered_2x_daily": 0.5436,
+    "t_stat_clustered_2x_event": -0.3607,
+    "verdict": "FAILED_HLZ_OR_STAT_GATE"
+  },
+  "generated_at_utc": "2026-11-20T13:07:23.212171Z",
+  "hypothesis_id": "H109_BOATS_OVERNIGHT_BIFURCATION_RTH_OPEN_VWAP_FADE",
+  "prereg_spec_sha256": "db9a6f8ac768bd1482c94b1d1c8559876aab0102b85464a5b443357a8342ec61",
+  "prewall_overlap_sessions": 512,
+  "primary_leg_a_boats_fade_short": {
+    "adversarial_ex_top3_days_2x_bps": -23.91,
+    "adversarial_ex_top3_days_t_2x": -5.4211,
+    "annualized_sharpe_1x": -2.029,
+    "annualized_sharpe_2x": -3.803,
+    "calendar_day_stats_2x": {
+      "ar1_rho": 0.0028,
+      "calmar": -0.6822,
+      "cum_return_pct": -63.3725,
+      "excess_kurtosis": -0.2552,
+      "max_drawdown_pct": 64.2274,
+      "mean_daily_bps": -22.4136,
+      "profit_factor": 0.5372,
+      "sessions": 439.0,
+      "sharpe_ann_ar1_adj": -3.7918,
+      "sharpe_ann_raw": -3.8025,
+      "skew": -0.3852,
+      "std_daily_bps": 93.5712
+    },
+    "conformal_pid_calibrated_stop_pct": 2.0,
+    "conformal_pid_empirical_stopout_rate": 0.0993,
+    "cpcv_5path_means_2x_bps": [
+      -22.41,
+      -22.41,
+      -22.41,
+      -22.41,
+      -22.41
+    ],
+    "cpcv_5path_positive_share": 0.0,
+    "distinct_dates": 439,
+    "dsr_probability_2x": 0.0,
+    "events": 3182,
+    "exit_reason_counts": {
+      "ADR0022_HARD_STOP": 844,
+      "CHANDELIER_STOP": 2127,
+      "EOD_1550_FLAT": 211
+    },
+    "hansen_spa_p_value_2x": 1.0,
+    "harvest_50_rate": 0.4114,
+    "hln_mcs_included": true,
+    "hlz_t_hurdle_n105": 4.2084,
+    "hygiene_14pt_passed": true,
+    "hygiene_violations": [],
+    "label": "H109_LEG_A_BOATS_FADE_SHORT",
+    "mean_cost_1x_bps": 10.45,
+    "mean_gross_day_bps": -1.51,
+    "mean_net_1x_day_bps": -11.96,
+    "mean_net_1x_event_bps": -7.59,
+    "mean_net_2x_day_bps": -22.41,
+    "mean_net_2x_event_bps": -17.94,
+    "p10_trade_net_2x_bps": -220.74,
+    "p90_trade_net_2x_bps": 133.48,
+    "passed": false,
+    "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+    "subperiods": {
+      "2024Q4": {
+        "dates": 40,
+        "events": 124,
+        "mean_1x_bps": -24.57,
+        "mean_2x_bps": -35.02,
+        "t_2x_daily": -1.8187
+      },
+      "2025H1": {
+        "dates": 97,
+        "events": 446,
+        "mean_1x_bps": -19.3,
+        "mean_2x_bps": -29.85,
+        "t_2x_daily": -2.9669
+      },
+      "2025H2": {
+        "dates": 115,
+        "events": 735,
+        "mean_1x_bps": -8.41,
+        "mean_2x_bps": -18.78,
+        "t_2x_daily": -2.1716
+      },
+      "2026_PREWALL": {
+        "dates": 187,
+        "events": 1877,
+        "mean_1x_bps": -7.64,
+        "mean_2x_bps": -18.09,
+        "t_2x_daily": -2.9408
+      }
+    },
+    "t_stat_clustered_1x_daily": -2.6779,
+    "t_stat_clustered_1x_event": -1.4143,
+    "t_stat_clustered_2x_daily": -5.0188,
+    "t_stat_clustered_2x_event": -3.344,
+    "verdict": "FAILED_HLZ_OR_STAT_GATE"
+  },
+  "receipt_sha256": "79d8e91c452bed271137140dd8cabb91cbe9bc1a025d58050de3bf64144b352c",
+  "sample_end_date": "2026-10-15",
+  "sample_start_date": "2024-10-01",
+  "schema": "sota.prewall-trial105-h109-receipt.v1",
+  "study_wall_date": "2026-10-15",
+  "trial_number": 105
+}
