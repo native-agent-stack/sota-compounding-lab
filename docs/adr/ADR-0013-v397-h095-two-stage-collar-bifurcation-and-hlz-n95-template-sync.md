@@ -18,3 +18,6 @@
 ## Verification
 
 - `python scripts/architecture_catalog.py --check`, `ruff check .`, `pytest -q` (`56 passed`), and `gitleaks git --staged --no-banner` (`0` leaks).
+
+## Verification & Evidence
+- Backfilled under `sota-upstream-shelf-lock ADR-0023` (2026-11-20): anchored to repository `UPSTREAM.md`, `upstream-map.toml`, and git history of `adr0023-19adr-evidence` (`shelf_lock.hard_upstream_rule` verified).

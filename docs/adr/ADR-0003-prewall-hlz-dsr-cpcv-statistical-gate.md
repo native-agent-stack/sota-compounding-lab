@@ -14,3 +14,6 @@ Across `80+` cumulative pre-registered trials (`HYPOTHESIS_LEDGER.md`), conventi
 1. Reject any backtest sample with `sample_max_date > 2026-10-15` (`Study-Wall Violation`).
 2. Scale the required date-clustered `t`-statistic monotonically with cumulative org trials `N` via Harvey, Liu & Zhu (2016) (`t*(1) = 3.000`, `t*(80) = 4.1466`).
 3. Require `dsr_probability >= 0.95` computed at native return frequency alongside `>= 5` recombined `CombinatorialPurgedCV` paths (`cpcv_pbo <= 0.30`) and positive net expectancy under `2x` transaction + Almgren–Chriss square-root impact costs.
+
+## Verification & Evidence
+- Backfilled under `sota-upstream-shelf-lock ADR-0023` (2026-11-20): anchored to repository `UPSTREAM.md`, `upstream-map.toml`, and git history of `adr0023-19adr-evidence` (`shelf_lock.hard_upstream_rule` verified).

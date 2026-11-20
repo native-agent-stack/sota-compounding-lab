@@ -17,3 +17,6 @@ Enforce a sequential 5-stage state machine in `evaluate_full_lifecycle`:
 3. **`PAPER_EXECUTION`:** Pure `REAL_BROKER_ONLY` paper fills (`>= 30` closed round-trips across `>= 10` sessions with positive realized `R`).
 4. **`EMPIRICAL_BAYES_FINETUNE`:** Shrunk `eb_r` + UCB priority weight (`[0.40, 1.65]`) with realized-`R` damping on losing lanes (`stop_atr_mult <= 1.98`).
 5. **`BROKER_MANIFEST_EXPORT`:** SHA-256 signed JSON manifest targeting sanctioned paper venues only.
+
+## Verification & Evidence
+- Backfilled under `sota-upstream-shelf-lock ADR-0023` (2026-11-20): anchored to repository `UPSTREAM.md`, `upstream-map.toml`, and git history of `adr0023-19adr-evidence` (`shelf_lock.hard_upstream_rule` verified).

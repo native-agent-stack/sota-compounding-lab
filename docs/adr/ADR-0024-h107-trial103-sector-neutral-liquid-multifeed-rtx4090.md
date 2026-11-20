@@ -22,3 +22,6 @@ Following `H106` (`Trial #102`, broad universe `-13.26 bps` `1x` / `-30.24 bps` 
 ## Verification
 
 - `pytest -q tests/test_h107_sector_neutral_rtx4090.py` (`3 passed` on `Noesis-Carbon` `.venv`), `ruff check` & `ruff format --check src scripts tests`, `scripts/architecture_catalog.py --check` (`24/24`), `scripts/org_visibility_doctor.py --offline`, and `gitleaks protect --staged --no-banner` (`0` leaks).
+
+## Verification & Evidence
+- Backfilled under `sota-upstream-shelf-lock ADR-0023` (2026-11-20): anchored to repository `UPSTREAM.md`, `upstream-map.toml`, and git history of `adr0023-19adr-evidence` (`shelf_lock.hard_upstream_rule` verified).

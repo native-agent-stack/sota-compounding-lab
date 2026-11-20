@@ -25,3 +25,6 @@ After consolidating all 8 trading-engine repositories, 18 pinned upstream librar
 ## Verification
 
 - `python scripts/architecture_catalog.py --check`, `ruff check .`, `ty check src/sota_compounding`, `pytest -q`, `python scripts/org_visibility_doctor.py`, and `gitleaks git --no-banner` (`0` leaks).
+
+## Verification & Evidence
+- Backfilled under `sota-upstream-shelf-lock ADR-0023` (2026-11-20): anchored to repository `UPSTREAM.md`, `upstream-map.toml`, and git history of `adr0023-19adr-evidence` (`shelf_lock.hard_upstream_rule` verified).

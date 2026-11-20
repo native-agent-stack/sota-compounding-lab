@@ -29,3 +29,6 @@ Read-only Lane 04/05 PIT audits (`sota-bus` `#299` / `#300`) and adversarial fal
 ## Verification
 
 - Adversarial `sota-falsifier` audit + delta pass, `ruff check --no-cache src scripts tests`, `pytest -q` (Win32 + WSL `.venv`), `python scripts/architecture_catalog.py --check` (`23/23` MADR ADRs), and `gitleaks` (`0` leaks).
+
+## Verification & Evidence
+- Backfilled under `sota-upstream-shelf-lock ADR-0023` (2026-11-20): anchored to repository `UPSTREAM.md`, `upstream-map.toml`, and git history of `adr0023-19adr-evidence` (`shelf_lock.hard_upstream_rule` verified).

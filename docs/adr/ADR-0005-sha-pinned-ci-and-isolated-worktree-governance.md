@@ -13,3 +13,6 @@ Concurrent multi-model peer agents (`AGY`, `Claude Code`, `Codex`, `DSH`) iterat
 
 1. Pin all external GitHub Actions in `.github/workflows/ci.yml` to immutable 40-character commit SHAs (`actions/checkout@11d5960a326750d5838078e36cf38b85af677262`, `actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065`) with `permissions: contents: read`.
 2. Author and verify multi-file changes in isolated `git worktree` branches coordinated via atomic SQLite WAL leases (`peer_bus.db`) before fast-forwarding `main`.
+
+## Verification & Evidence
+- Backfilled under `sota-upstream-shelf-lock ADR-0023` (2026-11-20): anchored to repository `UPSTREAM.md`, `upstream-map.toml`, and git history of `adr0023-19adr-evidence` (`shelf_lock.hard_upstream_rule` verified).
