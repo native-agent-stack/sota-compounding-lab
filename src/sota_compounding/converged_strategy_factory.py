@@ -49,7 +49,102 @@ RETIRED_TRAP_DENYLIST: dict[str, str] = {
     ),
     "RELAXED_OFI_ONLY_WITHOUT_JOINT_SWEEP": "H096 ablation -12.73 bps when ISO_F/BJZZ + 15s bid-survival dropped.",
     "OPENING_BELL_0930_0935_TAKER_CHASE": "ADR-0017 / H090 opening 5-minute taker whipsaw trap.",
+    "ADR0064_QUARANTINED_NOISY_PAPER_STRATEGIES": (
+        "ADR-0064: quarantine SOTA_DUAL_CLIMAX_STOP_AND_REVERSE (PF 0.47), POST_VIX_REVERSAL (-0.53R), "
+        "SOTA_DUAL_EXTREME_BALANCE_BREAK_EARLY, blind Wave-2 churn, and FLOW_VELOCITY_CAPITAL_RECYCLE."
+    ),
+    "SINGLE_TICKER_IPO_DAY1_OVERFIT": (
+        "ADR-0028 Post-ANT consolidation: forbid single-ticker/IPO-debut hardcoding in active merit routing."
+    ),
 }
+
+POST_ANT_ERA_ID = "POST_ANT_WHOLE_MARKET_MERIT"
+POST_ANT_CONCENTRATED_SOTA_STRATEGIES: frozenset[str] = frozenset(
+    {
+        "BJZZ_SUBPENNY_INST_DARK_SWEEP",
+        "VIX_SPIKE_AND_CRUSH_REGIME_SURFER",
+        "ZARATTINI_2024_5M_ORB",
+        "ZARATTINI_2025_NOISE_VWAP",
+        "H090_TIGHT_SPREAD_HIGH_OFI_PASSIVE_BID",
+        "H01_PRE_TRAVEL_POCKET_PIVOT",
+        "H08_FIRST_HAND_CATALYST_IGNITION",
+    }
+)
+POST_ANT_QUARANTINED_STRATEGIES: frozenset[str] = frozenset(
+    {
+        "SOTA_DUAL_CLIMAX_STOP_AND_REVERSE",
+        "POST_VIX_REVERSAL",
+        "POST_VIX_REVERSAL_MAJOR_GROWTH_THRUST",
+        "SOTA_DUAL_EXTREME_BALANCE_BREAK_EARLY",
+        "BLIND_WAVE2_REENTRY",
+        "RAPID_WAVE2_REENTRY_STRESS",
+        "FLOW_VELOCITY_CAPITAL_RECYCLE",
+    }
+)
+
+
+def is_post_ant_strategy_quarantined(strategy_id: str) -> bool:
+    """Canonical ADR-0064 quarantine predicate matching exact IDs and family variants."""
+    sid = str(strategy_id or "").strip().upper()
+    if sid in POST_ANT_QUARANTINED_STRATEGIES:
+        return True
+    return sid.startswith("POST_VIX_REVERSAL") or "FLOW_VELOCITY_CAPITAL_RECYCLE" in sid
+
+
+POST_ANT_VALID_SESSIONS: frozenset[str] = frozenset({"PRE_MARKET", "RTH_CORE", "POST_CLOSE", "OVERNIGHT_BOATS"})
+
+POST_ANT_STRATEGY_CONTRACTS_V2: dict[str, dict[str, Any]] = {
+    "BJZZ_SUBPENNY_INST_DARK_SWEEP": {
+        "allowed_sessions": frozenset({"PRE_MARKET", "RTH_CORE", "POST_CLOSE", "OVERNIGHT_BOATS"}),
+        "max_spread_bps": 28.0,
+        "spread_strict_lt": False,
+        "max_stop_pct": 1.60,
+        "allowed_symbols": None,
+    },
+    "VIX_SPIKE_AND_CRUSH_REGIME_SURFER": {
+        "allowed_sessions": frozenset({"PRE_MARKET", "RTH_CORE", "POST_CLOSE"}),
+        "max_spread_bps": 18.0,
+        "spread_strict_lt": False,
+        "max_stop_pct": 1.25,
+        "allowed_symbols": frozenset({"SPY", "QQQ", "IWM", "UVXY", "VXX", "SVIX", "VIXY"}),
+    },
+    "ZARATTINI_2024_5M_ORB": {
+        "allowed_sessions": frozenset({"RTH_CORE"}),
+        "max_spread_bps": 25.0,
+        "spread_strict_lt": False,
+        "max_stop_pct": 1.60,
+        "allowed_symbols": None,
+    },
+    "ZARATTINI_2025_NOISE_VWAP": {
+        "allowed_sessions": frozenset({"RTH_CORE"}),
+        "max_spread_bps": 3.0,
+        "spread_strict_lt": True,
+        "max_stop_pct": 0.50,
+        "allowed_symbols": frozenset({"SPY", "QQQ", "IWM"}),
+    },
+    "H090_TIGHT_SPREAD_HIGH_OFI_PASSIVE_BID": {
+        "allowed_sessions": frozenset({"RTH_CORE"}),
+        "max_spread_bps": 10.0,
+        "spread_strict_lt": False,
+        "max_stop_pct": 1.25,
+        "allowed_symbols": None,
+    },
+    "H01_PRE_TRAVEL_POCKET_PIVOT": {
+        "allowed_sessions": frozenset({"PRE_MARKET", "RTH_CORE", "POST_CLOSE", "OVERNIGHT_BOATS"}),
+        "max_spread_bps": 28.0,
+        "spread_strict_lt": False,
+        "max_stop_pct": 1.60,
+        "allowed_symbols": None,
+    },
+    "H08_FIRST_HAND_CATALYST_IGNITION": {
+        "allowed_sessions": frozenset({"PRE_MARKET", "RTH_CORE", "POST_CLOSE", "OVERNIGHT_BOATS"}),
+        "max_spread_bps": 28.0,
+        "spread_strict_lt": False,
+        "max_stop_pct": 1.60,
+        "allowed_symbols": None,
+    },
+}
+
 
 STARRED_FRAMEWORK_ADAPTERS: dict[str, dict[str, str]] = {
     "qlib": {
@@ -216,6 +311,7 @@ class TradeReflectionRecord:
     entry_ofi: float
     stop_pct: float
     exit_reason: str
+    symbol: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,7 +347,7 @@ def _require_finite_num(value: Any, name: str) -> float:
 
 def check_retired_trap_firewall(
     *,
-    tags: list[str] | tuple[str, ...],
+    tags: list[str] | tuple[str, ...] | str,
     is_post_incentive: bool = False,
     holds_overnight_moc_to_moo: bool = False,
     unshielded_lit_passive: bool = False,
@@ -260,10 +356,18 @@ def check_retired_trap_firewall(
 ) -> tuple[bool, tuple[str, ...]]:
     """Fail-closed firewall blocking any strategy or batch sweep from re-testing retired negative-EV traps."""
     violations: list[str] = []
-    for raw_tag in tags:
+    if isinstance(tags, str):
+        norm_tags: tuple[str, ...] | list[str] = (tags,)
+    elif isinstance(tags, bytes):
+        norm_tags = (tags.decode("utf-8", errors="ignore"),)
+    else:
+        norm_tags = tags
+    for raw_tag in norm_tags:
         norm = str(raw_tag or "").strip().upper()
         if norm in RETIRED_TRAP_DENYLIST:
             violations.append(f"RETIRED_TRAP:{norm}")
+        if is_post_ant_strategy_quarantined(norm):
+            violations.append(f"QUARANTINED_ADR0064:{norm}")
     if is_post_incentive:
         violations.append("RETIRED_TRAP:POST_INCENTIVE_LATE_CHASE")
     if holds_overnight_moc_to_moo:
@@ -286,13 +390,22 @@ def reflect_and_finetune_batch(
     now_utc: datetime | None = None,
 ) -> CompoundingReflectionDigest:
     """Run dimensionless compounding learning reflection & bounded parameter fine-tuning (`ADR-0022 <= 2.00%`)."""
-    sid = str(strategy_id or "").strip()
-    if not sid:
+    raw_sid = str(strategy_id or "").strip()
+    if not raw_sid:
         raise ValueError("strategy_id must be non-empty")
+    sid = raw_sid.upper()
+    if is_post_ant_strategy_quarantined(sid):
+        raise ValueError(f"QUARANTINED_ADR0064: reflection tuning refused for quarantined strategy {raw_sid!r}")
 
     spec = CONVERGED_FOUNDATION_CATALOG.get(sid)
-    base_stop_pct = spec.default_stop_pct if spec else 1.50
-    base_max_spread_bps = spec.max_spread_bps if spec else 22.0
+    contract = POST_ANT_STRATEGY_CONTRACTS_V2.get(sid)
+    contract_max_stop = (
+        min(ADR0022_MAX_STOP_PCT, float(contract["max_stop_pct"])) if contract is not None else ADR0022_MAX_STOP_PCT
+    )
+    base_stop_pct = min(spec.default_stop_pct if spec else contract_max_stop, contract_max_stop)
+    base_max_spread_bps = (
+        spec.max_spread_bps if spec else (float(contract["max_spread_bps"]) if contract is not None else 22.0)
+    )
     base_min_ofi = spec.min_ofi_norm if spec else 0.25
     base_tier1_mfe = spec.tier1_arm_mfe_pct if spec else 0.65
     is_major_core = spec.is_major_core if spec else False
@@ -324,7 +437,7 @@ def reflect_and_finetune_batch(
             "mean_slippage_bps": 0.0,
             "mean_spread_bps": 0.0,
             "eb_tuning": asdict(eb),
-            "recommended_stop_pct": min(ADR0022_MAX_STOP_PCT, base_stop_pct),
+            "recommended_stop_pct": min(contract_max_stop, base_stop_pct),
             "recommended_max_spread_bps": base_max_spread_bps,
             "recommended_min_ofi_norm": base_min_ofi,
             "recommended_tier1_arm_mfe_pct": base_tier1_mfe,
@@ -344,7 +457,7 @@ def reflect_and_finetune_batch(
             mean_slippage_bps=0.0,
             mean_spread_bps=0.0,
             eb_tuning=eb,
-            recommended_stop_pct=round(min(ADR0022_MAX_STOP_PCT, base_stop_pct), 2),
+            recommended_stop_pct=round(min(contract_max_stop, base_stop_pct), 2),
             recommended_max_spread_bps=round(base_max_spread_bps, 2),
             recommended_min_ofi_norm=round(base_min_ofi, 3),
             recommended_tier1_arm_mfe_pct=round(base_tier1_mfe, 2),
@@ -363,6 +476,21 @@ def reflect_and_finetune_batch(
     spread_sum = 0.0
 
     for rec in records:
+        if rec.strategy_id != strategy_id:
+            if is_post_ant_strategy_quarantined(str(rec.strategy_id or "")):
+                raise ValueError(
+                    f"QUARANTINED_ADR0064: reflection record belongs to quarantined strategy {rec.strategy_id!r}"
+                )
+            raise ValueError(
+                f"STRATEGY_ID_MISMATCH: record strategy_id={rec.strategy_id!r} != batch strategy_id={strategy_id!r}"
+            )
+        if contract is not None and contract["allowed_symbols"] is not None:
+            rec_sym = str(rec.symbol or "").strip().upper()
+            if not rec_sym or rec_sym not in contract["allowed_symbols"]:
+                allowed_list = sorted(contract["allowed_symbols"])
+                raise ValueError(
+                    f"STRATEGY_SYMBOL_NOT_ALLOWED: {sid} requires symbol in {allowed_list}, got {rec.symbol!r}"
+                )
         r_val = _require_finite_num(rec.realized_r, "realized_r")
         mfe_val = _require_finite_num(rec.mfe_r, "mfe_r")
         _require_finite_num(rec.mae_r, "mae_r")
@@ -370,8 +498,10 @@ def reflect_and_finetune_batch(
         spr_val = _require_finite_num(rec.spread_bps, "spread_bps")
         _require_finite_num(rec.entry_ofi, "entry_ofi")
         stop_val = _require_finite_num(rec.stop_pct, "stop_pct")
-        if stop_val <= 0.0 or stop_val > ADR0022_MAX_STOP_PCT:
-            raise ValueError(f"ADR-0022 violation in reflection record: stop_pct={stop_val}")
+        if stop_val <= 0.0 or stop_val > contract_max_stop:
+            raise ValueError(
+                f"ADR-0022/contract violation in reflection record: stop_pct={stop_val} > {contract_max_stop}"
+            )
         if mfe_val < 0.0 or spr_val < 0.0:
             raise ValueError(f"mfe_r ({mfe_val}) and spread_bps ({spr_val}) must be >= 0")
 
@@ -425,13 +555,14 @@ def reflect_and_finetune_batch(
     actions: list[str] = []
 
     if mean_slip_bps > 5.0 or mean_spread_bps > base_max_spread_bps * 0.90:
-        rec_max_spread_bps = max(6.0, round(base_max_spread_bps * 0.82, 2))
+        tightened_spr = round(base_max_spread_bps * 0.82, 2)
+        rec_max_spread_bps = min(base_max_spread_bps, max(min(6.0, tightened_spr), tightened_spr))
         rec_min_ofi = min(0.60, round(base_min_ofi + 0.08, 3))
         actions.append("TIGHTEN_SPREAD_COLLAR_AND_REQUIRE_PASSIVE_MICROPRICE_PEG")
 
     if premature_rate_pct >= 25.0:
-        # Widen slightly within ADR-0022 <= 2.00% ceiling AND arm lossless breakeven earlier
-        rec_stop_pct = min(ADR0022_MAX_STOP_PCT, round(base_stop_pct + 0.15, 2))
+        # Widen slightly within contract/ADR-0022 ceiling AND arm lossless breakeven earlier
+        rec_stop_pct = min(contract_max_stop, round(base_stop_pct + 0.15, 2))
         rec_tier1_mfe = max(0.30, round(base_tier1_mfe * 0.85, 2))
         actions.append("ARM_TIER1_LOSSLESS_FLOOR_EARLIER_AND_CALIBRATE_GK_VOL_STOP")
     elif capture_eff < 0.40 and wins >= 2:
@@ -447,7 +578,7 @@ def reflect_and_finetune_batch(
     if not actions:
         actions.append("HOLD_BASELINE_CONTINUE_PAPER_SAMPLE_ACCRUAL")
 
-    rec_stop_pct = round(min(ADR0022_MAX_STOP_PCT, max(0.50, rec_stop_pct)), 2)
+    rec_stop_pct = round(min(contract_max_stop, max(min(0.50, contract_max_stop), rec_stop_pct)), 2)
 
     digest_payload: dict[str, Any] = {
         "schema_version": REFLECTION_DIGEST_SCHEMA,
@@ -561,3 +692,91 @@ def build_noesis_prewall_factory_plan(
     }
     plan["plan_sha256"] = hashlib.sha256(json.dumps(plan, sort_keys=True).encode("utf-8")).hexdigest()
     return plan
+
+
+def evaluate_post_ant_symbol_merit_contract(
+    *,
+    symbol: str,
+    strategy_id: str,
+    merit_score: float,
+    df_pillars_manifested: int,
+    spread_bps: float,
+    requested_stop_pct: float = 1.60,
+    sec_dilution_clean: bool = False,
+    session_mode: str = "RTH_CORE",
+    study_wall_cutoff: date = STUDY_WALL_DATE,
+) -> dict[str, Any]:
+    """Validate a Post-ANT whole-market merited symbol against ADR-0064 quarantine, ADR-0022 stop & pre-wall rules."""
+    if study_wall_cutoff > STUDY_WALL_DATE:
+        raise ValueError(
+            f"Pre-wall breach: study_wall_cutoff={study_wall_cutoff.isoformat()} > {STUDY_WALL_DATE.isoformat()}"
+        )
+    sym = str(symbol or "").strip().upper()
+    sid = str(strategy_id or "").strip().upper()
+    sess = str(session_mode or "").strip().upper()
+    if not sym or not sym.replace(".", "").isalnum():
+        raise ValueError(f"Invalid symbol: {symbol!r}")
+    if sess not in POST_ANT_VALID_SESSIONS:
+        raise ValueError(f"Unsupported session_mode: {session_mode!r}")
+    if isinstance(df_pillars_manifested, bool) or not isinstance(df_pillars_manifested, int):
+        raise ValueError("df_pillars_manifested must be an int")
+    if not isinstance(sec_dilution_clean, bool):
+        raise ValueError("sec_dilution_clean must be a bool")
+    if any(isinstance(x, bool) for x in (merit_score, spread_bps, requested_stop_pct)) or not (
+        math.isfinite(merit_score) and math.isfinite(spread_bps) and math.isfinite(requested_stop_pct)
+    ):
+        raise ValueError("Numeric parameters must be finite non-bool numbers")
+
+    reasons: list[str] = []
+    contract = POST_ANT_STRATEGY_CONTRACTS_V2.get(sid)
+    if is_post_ant_strategy_quarantined(sid):
+        reasons.append(f"QUARANTINED_ADR0064:{sid}")
+    elif contract is None:
+        reasons.append(f"NON_ACTIVE_SOTA_STRATEGY:{sid}")
+    else:
+        if sess not in contract["allowed_sessions"]:
+            reasons.append(f"STRATEGY_SESSION_NOT_ALLOWED:{sid}:{sess}")
+        allowed_syms = contract["allowed_symbols"]
+        if allowed_syms is not None and sym not in allowed_syms:
+            reasons.append(f"STRATEGY_SYMBOL_NOT_ALLOWED:{sid}:{sym}")
+        c_max_spr = float(contract["max_spread_bps"])
+        if spread_bps > 0.0 and (
+            (contract["spread_strict_lt"] and spread_bps >= c_max_spr)
+            or (not contract["spread_strict_lt"] and spread_bps > c_max_spr)
+        ):
+            reasons.append(f"STRATEGY_SPREAD_EXCEEDS_CONTRACT:{sid}:{spread_bps}>{c_max_spr}")
+        c_max_stop = float(contract["max_stop_pct"])
+        if 0.0 < requested_stop_pct <= ADR0022_MAX_STOP_PCT and requested_stop_pct > c_max_stop:
+            reasons.append(f"STRATEGY_STOP_EXCEEDS_CONTRACT:{sid}:{requested_stop_pct}>{c_max_stop}")
+
+    if not sec_dilution_clean:
+        reasons.append("SEC_90D_DILUTION_UNVERIFIED_OR_BLOCKED")
+    if requested_stop_pct <= 0.0 or requested_stop_pct > ADR0022_MAX_STOP_PCT:
+        reasons.append(f"ADR0022_STOP_EXCEEDS_CAP:{requested_stop_pct}")
+    if spread_bps <= 0.0 or spread_bps > 35.0:
+        reasons.append(f"SPREAD_ABOVE_BOATS_CAP:{spread_bps}")
+    if df_pillars_manifested < 0 or df_pillars_manifested > 6:
+        reasons.append(f"INVALID_DF_PILLARS_COUNT:{df_pillars_manifested}")
+    elif df_pillars_manifested < 3:
+        reasons.append(f"INSUFFICIENT_DF_PILLARS:{df_pillars_manifested}")
+
+    admitted = len(reasons) == 0 and merit_score >= 38.0
+    merit_tier = (
+        "MERIT_TIER_1_CORE"
+        if (admitted and merit_score >= 58.0 and spread_bps <= 15.0 and df_pillars_manifested >= 4)
+        else ("MERIT_TIER_2_ACTIVE" if admitted else "REJECTED_OR_WATCH_ONLY")
+    )
+    return {
+        "era": POST_ANT_ERA_ID,
+        "schema_version": "sota.post-ant-merit-contract.v1",
+        "study_wall_date": study_wall_cutoff.isoformat(),
+        "symbol": sym,
+        "strategy_id": sid,
+        "merit_tier": merit_tier,
+        "admitted": admitted,
+        "rejection_reasons": reasons,
+        "adr0022_max_stop_pct": ADR0022_MAX_STOP_PCT,
+        "take_profit_cap_enabled": False,
+        "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+        "standalone_alpha_claim": False,
+    }

@@ -31,5 +31,6 @@ Canonical MADR 4.0 decision index for `https://github.com/native-agent-stack/sot
 | [ADR-0025](ADR-0025-live-paper-tca-vs-nautilus-queue-parity-reconciler.md) | Live-Paper TCA vs. Nautilus/hftbacktest Queue-Parity Reconciler & Empirical-Bayes Decay Gate (`sota.tca-queue-parity.v1`, advisory `NEVER_GATED`) | Accepted | 2026-11-19 | `src/sota_compounding/tca_queue_parity.py`, `tests/test_adr0025_tca_queue_parity.py` |
 | [ADR-0026](ADR-0026-closed-loop-tca-collar-recalibration-temporal-firewall-and-trial104.md) | Closed-loop paper TCA collar recalibration, temporal firewall and Trial 104 | Accepted | 2026-11-19 | `src/sota_compounding/collar_recalibration.py`, `tests/test_adr0026_collar_recalibration.py` |
 | [ADR-0027](ADR-0027-v3110-next-session-date-contract-v2-and-qlib-alpha-factory.md) | `v3.11.0` Calendar-Aligned `next_session_date` Pre-Wall Lake, `sota.strategy-contract.v2`, `ADR-0059` TCA Cost Calibration & Trial `#104` Qlib `Alpha158` Benchmark | Accepted | 2026-11-20 | `src/sota_compounding/strategy_contract_v2.py`, `scripts/materialize_prewall_df10_df6.py`, `scripts/run_v3110_alpha_factory_s1_s2.py`, `tests/test_adr0027_strategy_contract_v2_and_next_session.py` |
+| [ADR-0028](ADR-0028-post-ant-whole-market-strategy-factory-and-quarantine-consolidation.md) | Post-ANT Whole-Market Strategy Factory, `ADR-0064` Quarantine & Lossless Merit Contract (`v3.11.1`) | Accepted | 2026-11-20 | `src/sota_compounding/converged_strategy_factory.py`, `tests/test_v3111_post_ant_factory_consolidation.py` |
 
-Total accepted ADRs: 27.
+Total accepted ADRs: 28.
