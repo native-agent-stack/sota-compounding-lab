@@ -1,0 +1,223 @@
+{
+  "schema": "sota.prewall-trial-receipt.v1",
+  "trial_number": 108,
+  "hypothesis_id": "H113_PREFILL_CONFIRM_DIRECTIONAL_LONGSHORT_PER_SYMBOL_MIN_TRAIL",
+  "prereg_spec_sha256": "09e3a8d29181a2ba662e0841f1b746e7d3058e309050e5f76cfceef7f5fa33b6",
+  "study_wall_iso": "2026-10-15",
+  "sample_window": "2024-01-02..2026-10-15",
+  "eval_start": "2024-02-01",
+  "sessions_scanned": 700,
+  "post_wall_bytes_read": 0,
+  "primary_arm": {
+    "label": "H113_PRIMARY_PREFILL_CONFIRM_LONGSHORT_PER_SYM_MIN_TRAIL",
+    "events": 195,
+    "distinct_dates": 94,
+    "mean_1x_event_bps": -0.55,
+    "t_1x_event": -0.1149,
+    "mean_2x_event_bps": -9.87,
+    "t_2x_event": -2.0507,
+    "mean_1x_daily_bps": -3.69,
+    "t_1x_daily": -0.6659,
+    "mean_2x_daily_bps": -12.99,
+    "t_2x_daily": -2.3469,
+    "hlz_t_required": 4.2148,
+    "sr_1x_ann": -1.09,
+    "sr_2x_ann": -3.843,
+    "calendar_zero_padded_sr_2x_ann": 0.0,
+    "dsr_2x": 0.0,
+    "hansen_spa_p": 1.0,
+    "profit_factor_2x": 0.652,
+    "win_rate_2x_pct": 39.0,
+    "max_dd_2x_pct": 11.86,
+    "green_to_red_pct": 0.0,
+    "conformal_pid_next_stop_pct": 1.091,
+    "conformal_pid_miscoverage_rate": 0.0872,
+    "leg_breakdown": {
+      "LONG": {
+        "events": 89,
+        "dates": 44,
+        "mean_1x_bps": -1.53,
+        "mean_2x_bps": -10.05,
+        "t_2x": -1.419,
+        "win_rate_2x_pct": 41.6
+      },
+      "SHORT": {
+        "events": 106,
+        "dates": 50,
+        "mean_1x_bps": 0.27,
+        "mean_2x_bps": -9.72,
+        "t_2x": -1.466,
+        "win_rate_2x_pct": 36.8
+      }
+    },
+    "adversarial_ex_top3_days_2x_bps": -17.56,
+    "adversarial_ex_top3_days_t_2x": -3.5164,
+    "cpcv_5path_means_2x_bps": [
+      -0.58,
+      -0.72,
+      -0.58,
+      -0.58,
+      -0.58
+    ],
+    "cpcv_5path_positive_share": 0.0,
+    "cpcv_pbo": 0.2,
+    "cpcv_oos_sharpe_ann": -0.814,
+    "cpcv_distinct_paths": true,
+    "hygiene_14pt_passed": false,
+    "hygiene_violations": [
+      "TOY_HORIZON_BELOW_MIN_TRL:sessions=94<required=274"
+    ],
+    "verdict": "FAILED_HLZ_OR_STAT_GATE",
+    "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+    "passed": false,
+    "prefill_confirmation_stats": {
+      "total_signal_candidates": 495,
+      "confirmed_filled_count": 195,
+      "cancelled_unfilled_0bps_count": 300,
+      "fill_rate_pct": 39.4,
+      "cancel_reasons": {
+        "TTL_EXPIRED_UNCONFIRMED": 242,
+        "PULL_ADVERSE_FLOW_VWAP": 58
+      },
+      "cancelled_counterfactual_mean_2x_bps": -35.9
+    }
+  },
+  "paired_ablation_arm": {
+    "label": "H113_ABLATION_MARKETABLE_UNIFORM_STOP",
+    "events": 495,
+    "distinct_dates": 99,
+    "mean_1x_event_bps": -8.66,
+    "t_1x_event": -1.0006,
+    "mean_2x_event_bps": -17.99,
+    "t_2x_event": -2.08,
+    "mean_1x_daily_bps": -8.66,
+    "t_1x_daily": -1.0006,
+    "mean_2x_daily_bps": -17.99,
+    "t_2x_daily": -2.08,
+    "hlz_t_required": 4.2148,
+    "sr_1x_ann": -1.596,
+    "sr_2x_ann": -3.319,
+    "calendar_zero_padded_sr_2x_ann": 0.0,
+    "dsr_2x": 0.0,
+    "hansen_spa_p": 1.0,
+    "profit_factor_2x": 0.679,
+    "win_rate_2x_pct": 33.3,
+    "max_dd_2x_pct": 16.43,
+    "green_to_red_pct": 18.2,
+    "conformal_pid_next_stop_pct": 1.72,
+    "conformal_pid_miscoverage_rate": 0.1091,
+    "leg_breakdown": {
+      "LONG": {
+        "events": 230,
+        "dates": 46,
+        "mean_1x_bps": -15.23,
+        "mean_2x_bps": -23.77,
+        "t_2x": -2.359,
+        "win_rate_2x_pct": 57.8
+      },
+      "SHORT": {
+        "events": 265,
+        "dates": 53,
+        "mean_1x_bps": -2.95,
+        "mean_2x_bps": -12.96,
+        "t_2x": -0.951,
+        "win_rate_2x_pct": 12.1
+      }
+    },
+    "adversarial_ex_top3_days_2x_bps": -27.1,
+    "adversarial_ex_top3_days_t_2x": -4.0407,
+    "cpcv_5path_means_2x_bps": [
+      -30.58,
+      14.66,
+      -18.6,
+      -14.49,
+      -42.13
+    ],
+    "cpcv_5path_positive_share": 0.2,
+    "cpcv_pbo": null,
+    "cpcv_oos_sharpe_ann": -3.319,
+    "cpcv_distinct_paths": true,
+    "hygiene_14pt_passed": false,
+    "hygiene_violations": [
+      "TOY_HORIZON_BELOW_MIN_TRL:sessions=99<required=263"
+    ],
+    "verdict": "FAILED_HLZ_OR_STAT_GATE",
+    "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+    "passed": false
+  },
+  "ablation_delta_prefill_min_trail_vs_blind_uniform": {
+    "delta_mean_2x_daily_bps": 5.0,
+    "delta_max_dd_2x_pct_reduction": 4.57,
+    "delta_green_to_red_pct_reduction": 18.2,
+    "delta_profit_factor_2x": -0.027
+  },
+  "multiday_swing_arm": {
+    "label": "H113_DIAG_MULTIDAY_SWING_PER_SYM_MIN_TRAIL",
+    "events": 195,
+    "distinct_dates": 105,
+    "mean_1x_event_bps": -160.5,
+    "t_1x_event": -21.9464,
+    "mean_2x_event_bps": -169.87,
+    "t_2x_event": -23.2929,
+    "mean_1x_daily_bps": -140.5,
+    "t_1x_daily": -11.3941,
+    "mean_2x_daily_bps": -149.07,
+    "t_2x_daily": -11.9561,
+    "hlz_t_required": 4.2148,
+    "sr_1x_ann": -17.652,
+    "sr_2x_ann": -18.522,
+    "calendar_zero_padded_sr_2x_ann": 0.0,
+    "dsr_2x": 0.0,
+    "hansen_spa_p": 1.0,
+    "profit_factor_2x": 0.044,
+    "win_rate_2x_pct": 3.1,
+    "max_dd_2x_pct": 79.54,
+    "green_to_red_pct": 0.0,
+    "conformal_pid_next_stop_pct": 2.0,
+    "conformal_pid_miscoverage_rate": 0.9128,
+    "leg_breakdown": {
+      "LONG": {
+        "events": 89,
+        "dates": 44,
+        "mean_1x_bps": -162.1,
+        "mean_2x_bps": -170.61,
+        "t_2x": -15.297,
+        "win_rate_2x_pct": 2.2
+      },
+      "SHORT": {
+        "events": 106,
+        "dates": 50,
+        "mean_1x_bps": -159.15,
+        "mean_2x_bps": -169.24,
+        "t_2x": -17.464,
+        "win_rate_2x_pct": 3.8
+      }
+    },
+    "adversarial_ex_top3_days_2x_bps": -164.14,
+    "adversarial_ex_top3_days_t_2x": -25.1172,
+    "cpcv_5path_means_2x_bps": [
+      -124.93,
+      -139.74,
+      -184.86,
+      -169.8,
+      -126.0
+    ],
+    "cpcv_5path_positive_share": 0.0,
+    "cpcv_pbo": null,
+    "cpcv_oos_sharpe_ann": -18.522,
+    "cpcv_distinct_paths": true,
+    "hygiene_14pt_passed": false,
+    "hygiene_violations": [
+      "TOY_HORIZON_BELOW_MIN_TRL:invalid_cadence='daily_swing'",
+      "TOY_HORIZON_BELOW_MIN_TRL:sessions=105<required=404"
+    ],
+    "verdict": "FAILED_HLZ_OR_STAT_GATE",
+    "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+    "passed": false
+  },
+  "overall_passed": false,
+  "overall_verdict": "FAILED",
+  "promotion_track": "PROTECTIVE_FILTER_OR_GOVERNANCE",
+  "generated_at_utc": "2026-11-20T20:38:34.205928Z",
+  "receipt_sha256": "b3e940e1b711b39b33e04e7f017964ce7e39d6e970006437db919fd00ee95889"
+}
