@@ -210,8 +210,12 @@ def materialize_df10_daily(lake_root: pathlib.Path, valid_xnys_dates: set[str]) 
 
     con = duckdb.connect()
     con.execute("PRAGMA threads=32")
-    con.execute("CREATE TEMP TABLE xnys_sessions (trade_date DATE PRIMARY KEY)")
-    con.executemany("INSERT INTO xnys_sessions VALUES (?)", [(d,) for d in sorted(valid_xnys_dates)])
+    sorted_xnys = sorted(valid_xnys_dates)
+    con.execute("CREATE TEMP TABLE xnys_sessions (trade_date DATE PRIMARY KEY, next_session_date DATE)")
+    xnys_pairs = [
+        (sorted_xnys[i], sorted_xnys[i + 1] if i + 1 < len(sorted_xnys) else None) for i in range(len(sorted_xnys))
+    ]
+    con.executemany("INSERT INTO xnys_sessions VALUES (?, ?)", xnys_pairs)
 
     # Combine raw unadjusted bars (for price/dvol filters) + split-adjusted bars (for forward returns & VDU patterns)
     # Every rolling baseline uses strictly prior 20 XNYS sessions (20 PRECEDING AND 1 PRECEDING -> d < trade_date).
@@ -247,6 +251,7 @@ def materialize_df10_daily(lake_root: pathlib.Path, valid_xnys_dates: set[str]) 
             SELECT
                 r.symbol,
                 r.trade_date,
+                x.next_session_date,
                 r.raw_open,
                 r.raw_high,
                 r.raw_low,
@@ -259,16 +264,22 @@ def materialize_df10_daily(lake_root: pathlib.Path, valid_xnys_dates: set[str]) 
                 COALESCE(s.split_close, r.raw_close) AS split_close,
                 COALESCE(s.split_volume, r.raw_volume) AS split_volume,
                 (COALESCE(s.split_high, r.raw_high) - COALESCE(s.split_low, r.raw_low))
-                    / GREATEST(COALESCE(s.split_close, r.raw_close), 1e-6) AS bar_range_pct
+                    / GREATEST(COALESCE(s.split_close, r.raw_close), 1e-6) AS bar_range_pct,
+                sn.split_open AS cal_next1_split_open,
+                sn.split_close AS cal_next1_split_close,
+                sn.split_low AS cal_next1_split_low,
+                sn.split_high AS cal_next1_split_high
             FROM raw_all r
             INNER JOIN xnys_sessions x ON x.trade_date = r.trade_date
             LEFT JOIN split_all s ON s.symbol = r.symbol AND s.trade_date = r.trade_date
+            LEFT JOIN split_all sn ON sn.symbol = r.symbol AND sn.trade_date = x.next_session_date
             QUALIFY ROW_NUMBER() OVER (PARTITION BY r.symbol, r.trade_date ORDER BY r.raw_volume DESC) = 1
         ),
         windowed AS (
             SELECT
                 symbol,
                 trade_date,
+                next_session_date,
                 raw_open,
                 raw_high,
                 raw_low,
@@ -294,12 +305,12 @@ def materialize_df10_daily(lake_root: pathlib.Path, valid_xnys_dates: set[str]) 
                 LAG(raw_close, 1) OVER ws AS prev_raw_close,
                 LAG(split_close, 5) OVER ws AS lag5_split_close,
                 LAG(split_close, 20) OVER ws AS lag20_split_close,
-                LEAD(split_open, 1) OVER ws AS next1_split_open,
-                LEAD(split_close, 1) OVER ws AS next1_split_close,
+                cal_next1_split_open AS next1_split_open,
+                cal_next1_split_close AS next1_split_close,
                 LEAD(split_close, 3) OVER ws AS next3_split_close,
                 LEAD(split_close, 5) OVER ws AS next5_split_close,
-                LEAD(split_low, 1) OVER ws AS next1_split_low,
-                LEAD(split_high, 1) OVER ws AS next1_split_high
+                cal_next1_split_low AS next1_split_low,
+                cal_next1_split_high AS next1_split_high
             FROM joined
             WINDOW
                 ws AS (PARTITION BY symbol ORDER BY trade_date),
@@ -309,6 +320,7 @@ def materialize_df10_daily(lake_root: pathlib.Path, valid_xnys_dates: set[str]) 
         SELECT
             symbol,
             CAST(trade_date AS VARCHAR) AS trade_date,
+            CAST(next_session_date AS VARCHAR) AS next_session_date,
             raw_open,
             raw_high,
             raw_low,
