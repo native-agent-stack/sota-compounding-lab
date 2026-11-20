@@ -184,6 +184,36 @@ SUITABLE_PLAYBACK_HORIZONS: dict[str, PlaybackHorizonSpec] = {
     ),
 }
 
+# Owner-Authorized Quality-First Experimental Policy (ADR-0031 / shelf-lock ADR-0022):
+# Inside this effectively-private experimental environment (0 external stars/watchers, zero redistribution),
+# repos are evaluated STRICTLY on technical quality, mathematical rigor, and SOTA-ness — NEVER rejected solely
+# on license tags (GPL/AGPL/BUSL/MPL/Commons-Clause/non-commercial R&D weights).
+EXPERIMENTAL_EVALUATION_POLICY = "QUALITY_AND_SOTA_ONLY_NO_LICENSE_EXCLUSION"
+
+EXPERIMENTAL_QUALITY_FIRST_SOTA_UNBLOCKED: frozenset[str] = frozenset(
+    {
+        "cvxgrp/cvxportfolio",
+        "man-group/arcticdb",
+        "google-research/timesfm",
+        "xtdb/xtdb",
+        "edtechre/pybroker",
+        "freqtrade/freqtrade",
+        "ml4t/backtest",
+        "ml4t/engineer",
+        "ml4t/skills",
+        "ml4t/models",
+        "nixtla/conformalforecast",
+        "salesforceairesearch/uni2ts",
+        "ibm-granite/granite-tsfm",
+        "alphanome-ai/sec-parser",
+        "nvidia/cudf",
+        "nvidia/cuml",
+        "aangelopoulos/conformal-time-series",
+        "nautechsystems/nautilus_agents",
+    }
+)
+
+# Strictly TECHNICAL low-quality / stale / toy / fragile-scraper sources only (zero license-only bans!)
 BANNED_LOW_QUALITY_SOURCES: frozenset[str] = frozenset(
     {
         "yfinance",
@@ -192,23 +222,13 @@ BANNED_LOW_QUALITY_SOURCES: frozenset[str] = frozenset(
         "mementum/backtrader",
         "backtesting.py",
         "kernc/backtesting.py",
-        "cvxportfolio",
-        "cvxgrp/cvxportfolio",
-        "freqtrade",
-        "freqtrade/freqtrade",
-        "pybroker",
-        "edtechre/pybroker",
-        "arcticdb",
-        "man-group/arcticdb",
         "mlfinlab",
         "hudson-and-thames/mlfinlab",
-        "finceptterminal",
-        "fincept-corporation/finceptterminal",
-        "openalgo",
-        "marketcalls/openalgo",
-        "openstock",
-        "open-dev-society/openstock",
-        "timesfm_v3_weights",
+        "tcapy",
+        "cuemacro/tcapy",
+        "vollib/vollib",
+        "abides-jpmc-public",
+        "jpmorganchase/abides-jpmc-public",
         "tradingview-api-scraper",
         "tradingview-screener-scraper",
     }
@@ -260,8 +280,8 @@ LOW_QUALITY_PRACTICE_PURGE_REGISTRY: dict[str, str] = {
         "Routing ADR-0064 quarantined bleeders or POST_INCENTIVE late chases violates negative-EV denylist."
     ),
     "SILENT_DATA_FETCH_EXCEPTION_SWALLOW_OR_BANNED_SOURCE": (
-        "Swallowing fetch errors silently (except Exception: pass) or importing copyleft/non-OSI/scraper libraries "
-        "violates No-Silent-Fallback and ADR-0020/0021 license firewalls."
+        "Swallowing fetch errors silently (except Exception: pass) or importing technically low-quality/stale/toy/"
+        "scraper libraries (yfinance, backtrader, single-asset backtesting.py, abandoned mlfinlab) fails hygiene."
     ),
 }
 

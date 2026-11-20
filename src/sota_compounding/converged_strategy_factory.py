@@ -174,12 +174,57 @@ STARRED_FRAMEWORK_ADAPTERS: dict[str, dict[str, str]] = {
     },
     "timesfm": {
         "repo": "google-research/timesfm",
-        "role": "LEGACY REF ONLY: v3.0 weights non-commercial; superseded by Apache-2.0 chronos2",
-        "authority": "NON_COMMERCIAL_WEIGHTS_RESTRICTED_USE_CHRONOS2",
+        "role": "Google Research 200M+ zero-shot time-series foundation model (active in personal experimental R&D)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
     },
     "chronos2": {
         "repo": "amazon-science/chronos-forecasting",
-        "role": "Apache-2.0 (code + weights) zero-shot multivariate/covariate probabilistic forecaster on RTX 4090",
+        "role": "Chronos-2 zero-shot multivariate/covariate probabilistic forecaster on RTX 4090",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "uni2ts": {
+        "repo": "SalesforceAIResearch/uni2ts",
+        "role": "Moirai universal multi-frequency probabilistic time-series foundation model on RTX 4090",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "granite_tsfm": {
+        "repo": "ibm-granite/granite-tsfm",
+        "role": "IBM TinyTimeMixers (TTM) ultra-fast zero-shot/few-shot temporal foundation models",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "arcticdb": {
+        "repo": "man-group/ArcticDB",
+        "role": "Man Group AHL C++ bitemporal/versioned DataFrame engine with native Polars/Arrow merge",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "cvxportfolio": {
+        "repo": "cvxgrp/cvxportfolio",
+        "role": "Stephen Boyd / Stanford multi-period convex MPC portfolio & market-impact optimization",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "xtdb": {
+        "repo": "xtdb/xtdb",
+        "role": "Arrow-backed native bitemporal SQL engine (valid_time + system_time) for PIT research parity",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "ml4t_suite": {
+        "repo": "ml4t/backtest",
+        "role": "Stefan Jansen 2026 modular ML4T stack (backtest, engineer, models, data, specs, skills)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "conformalforecast": {
+        "repo": "Nixtla/conformalforecast",
+        "role": "Time-series conformal prediction intervals complementing ADR-0029 Conformal PID stops",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "sec_parser": {
+        "repo": "alphanome-ai/sec-parser",
+        "role": "Semantic SEC 10-K/10-Q/8-K DOM tree parser powering Lazy Prices item-level cosine diffs",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "nvidia_rapids": {
+        "repo": "NVIDIA/cudf",
+        "role": "NVIDIA RAPIDS cuDF/cuML GPU DataFrame & ML acceleration on Noesis RTX 4090",
         "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
     },
     "arch": {

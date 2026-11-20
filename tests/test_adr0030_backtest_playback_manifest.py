@@ -100,7 +100,7 @@ def test_all_14_low_quality_practices_fail_closed_individually() -> None:
         (replace(clean, silent_exception_swallow=True), "SILENT_DATA_FETCH_EXCEPTION_SWALLOW_OR_BANNED_SOURCE"),
         (replace(clean, source_libraries=("yfinance",)), "SILENT_DATA_FETCH_EXCEPTION_SWALLOW_OR_BANNED_SOURCE"),
         (
-            replace(clean, source_libraries=("cvxgrp/cvxportfolio",)),
+            replace(clean, source_libraries=("mementum/backtrader",)),
             "SILENT_DATA_FETCH_EXCEPTION_SWALLOW_OR_BANNED_SOURCE",
         ),
     ]
@@ -160,10 +160,26 @@ def test_converged_factory_retired_traps_and_chronos2_upgrade() -> None:
     assert "VOL_TIMING_LEVERAGE_ABOVE_1X" in RETIRED_TRAP_DENYLIST
     assert "EX_POST_LIVE_MOVER_SURVIVORSHIP_BACKTEST" in RETIRED_TRAP_DENYLIST
     assert STARRED_FRAMEWORK_ADAPTERS["chronos2"]["repo"] == "amazon-science/chronos-forecasting"
-    assert "NON_COMMERCIAL" in STARRED_FRAMEWORK_ADAPTERS["timesfm"]["authority"]
-    assert {"arch", "linearmodels", "databento_dbn", "delta_rs", "ducklake", "mapie", "river", "numpyro"} <= set(
-        STARRED_FRAMEWORK_ADAPTERS
-    )
+    assert STARRED_FRAMEWORK_ADAPTERS["timesfm"]["authority"] == "RESEARCH_CANDIDATE_PREWALL_ONLY"
+    assert {
+        "arch",
+        "linearmodels",
+        "databento_dbn",
+        "delta_rs",
+        "ducklake",
+        "mapie",
+        "river",
+        "numpyro",
+        "arcticdb",
+        "cvxportfolio",
+        "xtdb",
+        "uni2ts",
+        "granite_tsfm",
+        "ml4t_suite",
+        "conformalforecast",
+        "sec_parser",
+        "nvidia_rapids",
+    } <= set(STARRED_FRAMEWORK_ADAPTERS)
 
 
 @settings(max_examples=80, deadline=None)
