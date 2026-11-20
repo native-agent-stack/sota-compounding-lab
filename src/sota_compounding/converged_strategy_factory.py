@@ -56,6 +56,21 @@ RETIRED_TRAP_DENYLIST: dict[str, str] = {
     "SINGLE_TICKER_IPO_DAY1_OVERFIT": (
         "ADR-0028 Post-ANT consolidation: forbid single-ticker/IPO-debut hardcoding in active merit routing."
     ),
+    "LEGACY_SP500_ADDITION_POP_CHURN": (
+        "Greenwood & Sammon (2025 JF) proved classic S&P 500 inclusion pops disappeared; retire addition chases."
+    ),
+    "VOL_TIMING_LEVERAGE_ABOVE_1X": (
+        "Cederburg et al. (2020 JFE): real-time vol-timing leverage > 1.0x fails OOS; cap strictly <= 1.0x crash brake."
+    ),
+    "EX_POST_LIVE_MOVER_SURVIVORSHIP_BACKTEST": (
+        "ADR-0030: forbid selecting today's live movers and backtesting backward; require causal T-1 PIT universes."
+    ),
+    "TOY_HORIZON_BELOW_MIN_TRL": (
+        "ADR-0030: forbid toy 30d (<60 sessions intraday / <252 sessions swing) windows below ADIA Lab #19 MinTRL."
+    ),
+    "FIXED_TAKE_PROFIT_CAP_CUTTING_TAIL": (
+        "ADR-0030 / ADR-0063: forbid hard Take-Profit caps that truncate convex right-tail lossless Chandelier runners."
+    ),
 }
 
 POST_ANT_ERA_ID = "POST_ANT_WHOLE_MARKET_MERIT"
@@ -149,7 +164,7 @@ POST_ANT_STRATEGY_CONTRACTS_V2: dict[str, dict[str, Any]] = {
 STARRED_FRAMEWORK_ADAPTERS: dict[str, dict[str, str]] = {
     "qlib": {
         "repo": "microsoft/qlib",
-        "role": "Cross-sectional factor library (Alpha158/Alpha360) & rolling LightGBM/GBDT pre-wall sweeps",
+        "role": "Cross-sectional factor library (Alpha158/360) & LightGBM/GBDT pre-wall sweeps (v0.9.8 AST hardened)",
         "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
     },
     "kronos": {
@@ -159,7 +174,57 @@ STARRED_FRAMEWORK_ADAPTERS: dict[str, dict[str, str]] = {
     },
     "timesfm": {
         "repo": "google-research/timesfm",
-        "role": "Zero-shot intraday bar/volatility foundation forecaster (pre-wall <=2026-10-15)",
+        "role": "LEGACY REF ONLY: v3.0 weights non-commercial; superseded by Apache-2.0 chronos2",
+        "authority": "NON_COMMERCIAL_WEIGHTS_RESTRICTED_USE_CHRONOS2",
+    },
+    "chronos2": {
+        "repo": "amazon-science/chronos-forecasting",
+        "role": "Apache-2.0 (code + weights) zero-shot multivariate/covariate probabilistic forecaster on RTX 4090",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "arch": {
+        "repo": "bashtage/arch",
+        "role": "Studentized Hansen SPA, White RC, Model Confidence Set (MCS), Block Bootstrap & HAR-RV (NCSA)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "linearmodels": {
+        "repo": "bashtage/linearmodels",
+        "role": "Fama-MacBeth cross-sectional regressions & two-way entity+date clustered panel SEs (NCSA)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "databento_dbn": {
+        "repo": "databento/dbn",
+        "role": "Zero-copy L2/L3 MBO/MBP-10 & NOII schema enforcing bitemporal ts_event_ns <= ts_recv_ns (Apache-2.0)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "delta_rs": {
+        "repo": "delta-io/delta-rs",
+        "role": "Immutable ACID Parquet time-travel snapshots for <=2026-10-15 pre-wall lake parity (Apache-2.0)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "ducklake": {
+        "repo": "duckdb/ducklake",
+        "role": "Native SQL-catalog ACID lakehouse & snapshot time-travel inside pinned DuckDB v2.0.0 (MIT)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "mapie": {
+        "repo": "scikit-learn-contrib/MAPIE",
+        "role": "Finite-sample Conformal Prediction (CQR, EnbPI, ACI) for stop <=2.00% tail bounds (BSD-3-Clause)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "river": {
+        "repo": "online-ml/river",
+        "role": "Streaming ADWIN/PageHinkley/KSWIN alpha-decay & Dec 6 2026 23/5 SIP drift alarms (BSD-3-Clause)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "numpyro": {
+        "repo": "pyro-ppl/numpyro",
+        "role": "JAX-JIT Hierarchical Empirical-Bayes partial pooling across Merit Farm strategy clusters (Apache-2.0)",
+        "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
+    },
+    "cvxpy_clarabel": {
+        "repo": "cvxpy/cvxpy",
+        "role": "Permissive Apache-2.0 convex optimization + Clarabel.rs conic solver replacing GPL-3.0 cvxportfolio",
         "authority": "RESEARCH_CANDIDATE_PREWALL_ONLY",
     },
     "nautilus_trader": {
@@ -179,7 +244,7 @@ STARRED_FRAMEWORK_ADAPTERS: dict[str, dict[str, str]] = {
     },
     "ml4t_diagnostic": {
         "repo": "ml4t/diagnostic",
-        "role": "Deflated Sharpe Ratio (DSR), PBO & excursion trade attribution (pinned v0.2.0)",
+        "role": "Deflated Sharpe Ratio (DSR), RAS, MinTRL, PBO & Triple-Barrier trade attribution (pinned v0.2.0)",
         "authority": "PINNED_UPSTREAM_PRODUCTION",
     },
     "vectorbt": {
