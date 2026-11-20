@@ -12,6 +12,7 @@ Enforces:
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 import pathlib
 import re
@@ -20,6 +21,16 @@ import sys
 import tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from sota_compounding.upstream_lib_strategy_e2e import (  # noqa: E402
+    audit_python_source_for_full_resolution,
+    compute_manifest_sha256,
+    enforce_full_resolution_zero_fallback_gate,
+)
+
 SHELF_DIR = pathlib.Path.home() / "Documents" / "upstream"
 COVERED_PREFIXES = ("src/", "scripts/")
 ALLOWED_HOW = frozenset({"install", "integrate", "build-on"})
@@ -154,13 +165,59 @@ def verify_leaks_and_catalog(root: pathlib.Path = ROOT) -> list[str]:
     return errors
 
 
+def verify_full_resolution_backbone(root: pathlib.Path = ROOT) -> list[str]:
+    """Enforce ADR-0038 Full-Resolution, Always-Full-Resolution, Zero-Residual, Zero-Fallback Gate."""
+    errors: list[str] = []
+    clean_env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    res = subprocess.run(
+        ["git", "-C", str(root), "ls-files"], capture_output=True, text=True, check=True, env=clean_env
+    )
+    for rel in (ln.strip() for ln in res.stdout.splitlines() if ln.strip()):
+        if not rel.startswith(COVERED_PREFIXES) or not rel.endswith(".py"):
+            continue
+        fp = root / rel
+        if not fp.is_file():
+            continue
+        try:
+            txt = fp.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        errors.extend(audit_python_source_for_full_resolution(txt, rel))
+
+    e2e_manifest = root / "docs" / "SOTA_UPSTREAM_LIB_E2E_REGIME_PERSYMBOL_MANIFEST.json"
+    if e2e_manifest.is_file():
+        try:
+            data = json.loads(e2e_manifest.read_text(encoding="utf-8"))
+        except Exception as exc:
+            errors.append(f"Full-resolution manifest unreadable: {exc}")
+            return errors
+        expected_sha = compute_manifest_sha256(data) if isinstance(data, dict) else ""
+        if not isinstance(data, dict) or data.get("manifest_sha256") != expected_sha:
+            errors.append("SOTA_UPSTREAM_LIB_E2E_REGIME_PERSYMBOL_MANIFEST.json SHA-256 digest mismatch")
+        audit = enforce_full_resolution_zero_fallback_gate(
+            data.get("upstream_library_runs") if isinstance(data, dict) else {},
+            require_all_engines=True,
+        )
+        if not audit["full_resolution_verified"]:
+            for v in audit["violations"]:
+                errors.append(f"ADR-0038 Full-Resolution Violation: {v}")
+    return errors
+
+
 def main() -> int:
-    problems = [*verify_upstream_map(ROOT), *verify_leaks_and_catalog(ROOT)]
+    problems = [
+        *verify_upstream_map(ROOT),
+        *verify_leaks_and_catalog(ROOT),
+        *verify_full_resolution_backbone(ROOT),
+    ]
     if problems:
         for p in problems:
             print(f"[MERGE-GATE FAIL] {p}", file=sys.stderr)
         return 1
-    print("[MERGE-GATE PASS] sota-compounding-lab upstream-map, 18 shelf pins, zero leaks, and ADR catalog verified.")
+    print(
+        "[MERGE-GATE PASS] sota-compounding-lab upstream-map, 18 shelf pins, zero leaks, "
+        "ADR-0038 full-resolution backbone, and ADR catalog verified."
+    )
     return 0
 
 

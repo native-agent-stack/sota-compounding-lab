@@ -29,6 +29,8 @@ from sota_compounding.upstream_lib_strategy_e2e import (
     MarketSituationInput,
     apply_regime_conditioned_per_symbol_factors,
     classify_market_situation,
+    compute_manifest_sha256,
+    enforce_full_resolution_zero_fallback_gate,
 )
 
 DEFAULT_SIDECAR_HOST = "127.0.0.1"
@@ -93,8 +95,77 @@ def make_sidecar_handler(state: dict[str, Any]) -> type[BaseHTTPRequestHandler]:
                             "/api/upstream_lib_e2e/manifest",
                             "/api/upstream_lib_e2e/route_targets",
                         ],
+                        "adr0038_full_resolution_routes": [
+                            "/api/full_resolution/status",
+                            "/api/full_resolution/manifest",
+                        ],
+                        "allow_silent_fallback": False,
                     },
                 )
+                return
+            if route in ("/api/full_resolution/status", "/api/full_resolution/manifest"):
+                manifest_path = pathlib.Path(state.get("e2e_manifest_path", _DEFAULT_E2E_MANIFEST_PATH))
+                if not manifest_path.is_file():
+                    self._send_json(
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                        {
+                            "ok": False,
+                            "full_resolution_verified": False,
+                            "allow_silent_fallback": False,
+                            "error": "FAIL_CLOSED_FULL_RESOLUTION_MANIFEST_MISSING",
+                        },
+                    )
+                    return
+                try:
+                    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                except Exception as exc:
+                    self._send_json(
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                        {
+                            "ok": False,
+                            "full_resolution_verified": False,
+                            "allow_silent_fallback": False,
+                            "error": f"FAIL_CLOSED_FULL_RESOLUTION_MANIFEST_CORRUPT: {exc}",
+                        },
+                    )
+                    return
+                expected_sha = compute_manifest_sha256(data) if isinstance(data, dict) else ""
+                sha_ok = isinstance(data, dict) and data.get("manifest_sha256") == expected_sha
+                audit = enforce_full_resolution_zero_fallback_gate(
+                    data.get("upstream_library_runs") if isinstance(data, dict) else {},
+                    require_all_engines=True,
+                )
+                hw = state["hardware"]
+                if not sha_ok or not audit["full_resolution_verified"]:
+                    self._send_json(
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                        {
+                            "ok": False,
+                            "full_resolution_verified": False,
+                            "allow_silent_fallback": False,
+                            "sha256_verified": sha_ok,
+                            "audit": audit,
+                            "error": "FAIL_CLOSED_FULL_RESOLUTION_GATE_REJECTED",
+                        },
+                    )
+                    return
+                if route == "/api/full_resolution/status":
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "ok": True,
+                            "adr": "ADR-0038",
+                            "full_resolution_verified": True,
+                            "allow_silent_fallback": False,
+                            "sha256_verified": True,
+                            "manifest_sha256": expected_sha,
+                            "device": hw.get("device", "cpu"),
+                            "cuda_available": bool(hw.get("cuda_available", False)),
+                            "audit": audit,
+                        },
+                    )
+                    return
+                self._send_json(HTTPStatus.OK, data)
                 return
             if route == "/api/upstream_lib_e2e/manifest":
                 manifest_path = pathlib.Path(state.get("e2e_manifest_path", _DEFAULT_E2E_MANIFEST_PATH))
@@ -133,6 +204,9 @@ def make_sidecar_handler(state: dict[str, Any]) -> type[BaseHTTPRequestHandler]:
             if route == "/api/gpu/score_batch":
                 rows = body.get("rows")
                 weights = body.get("weights")
+                require_gpu = bool(
+                    body.get("require_gpu", os.environ.get("SOTA_REQUIRE_FULL_RESOLUTION_GPU", "0") == "1")
+                )
                 if not isinstance(rows, list):
                     self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "rows must be a list"})
                     return
@@ -140,11 +214,25 @@ def make_sidecar_handler(state: dict[str, Any]) -> type[BaseHTTPRequestHandler]:
                     rows,
                     weights=weights if isinstance(weights, dict) else None,
                 )
+                if require_gpu and rows and not str(res.get("device", "")).startswith("cuda"):
+                    self._send_json(
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                        {
+                            "ok": False,
+                            "allow_silent_fallback": False,
+                            "device": res.get("device"),
+                            "error": "FAIL_CLOSED_NO_CPU_FALLBACK: CUDA required in full-resolution mode",
+                        },
+                    )
+                    return
                 self._send_json(HTTPStatus.OK, res)
                 return
 
             if route == "/api/gpu/bootstrap_cpcv":
                 returns = body.get("returns")
+                require_gpu = bool(
+                    body.get("require_gpu", os.environ.get("SOTA_REQUIRE_FULL_RESOLUTION_GPU", "0") == "1")
+                )
                 if not isinstance(returns, list):
                     self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "returns must be a list"})
                     return
@@ -156,6 +244,17 @@ def make_sidecar_handler(state: dict[str, Any]) -> type[BaseHTTPRequestHandler]:
                         annualization=float(body.get("annualization", 252.0)),
                         seed=int(body.get("seed", 42)),
                     )
+                    if require_gpu and not str(res.get("device", "")).startswith("cuda"):
+                        self._send_json(
+                            HTTPStatus.SERVICE_UNAVAILABLE,
+                            {
+                                "ok": False,
+                                "allow_silent_fallback": False,
+                                "device": res.get("device"),
+                                "error": "FAIL_CLOSED_NO_CPU_FALLBACK: CUDA required in full-resolution mode",
+                            },
+                        )
+                        return
                     self._send_json(HTTPStatus.OK, res)
                 except ValueError as exc:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})

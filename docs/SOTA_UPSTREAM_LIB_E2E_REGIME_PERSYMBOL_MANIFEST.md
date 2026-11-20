@@ -1,25 +1,27 @@
 # SOTA Upstream-Library Strategy E2E Sim & Regime-Conditioned Per-Symbol Manifest (`ADR-0035`)
 
 - **Schema:** `sota.upstream-lib-strategy-e2e-regime-persymbol.v1` · **Version:** `1.0.0` · **Study Wall:** `<= 2026-10-15`
-- **SHA-256 Digest:** `37c4e0c13f50b85424b6f090c61889a6929d81676f97b0be7a82cdfca7bef682`
+- **SHA-256 Digest:** `fcd06e224d68de521fcf6e3fc4f593a53a76d0bce311ec892b120d47aa31ccc8`
 - **Governance:** `PROTECTIVE_FILTER_OR_GOVERNANCE` · `standalone_alpha_claim=False` · `hlz_trial_consumed=False` · Next HLZ `t*(110) = 4.2189`
 - **Safety Invariants:** `ADR-0022 <= 2.00%` · `take_profit_cap_enabled=False` · `paper_only_live_refused=True` (live ports `[4001, 7496, 8796, 8798]` refused)
+- **Full-Resolution Backbone (`ADR-0038`):** `full_resolution_verified=True` · `allow_silent_fallback=False` · `residual_fallbacks_count=0` · `engines_verified=9/9`
 
 ## 1. Live Multi-Horizon Market Situation
 
 | Session | Macro Regime | Tactical VIX Regime | Composite Situation | VIX 9d/3m | Soft Log-Odds | Cederburg Brake | Short Overlay |
 | :--- | :--- | :--- | :--- | ---: | ---: | ---: | :--- |
-| `POST_CLOSE` | `CONTRACTION` | `CRISIS_SPIKE` | `CONTRACTION_RISK_OFF` | `1.4034` | `-6.0000` | `0.4554x` | `False` |
+| `POST_CLOSE` | `CONTRACTION` | `CRISIS_SPIKE` | `CONTRACTION_RISK_OFF` | `1.3161` | `-6.0000` | `0.5015x` | `False` |
 
 ## 2. Executed Pinned SOTA Upstream Libraries
 
 | Upstream Library | Executed | Version / Engine | Key Pre-Wall Verification Result |
 | :--- | :--- | :--- | :--- |
 | `bashtage_arch` | `True` | `9.0.0` | Hansen SPA p=0.0520; MCS M*=['VBT_20D_BREAKOUT', 'VBT_IBS_LT_15', 'VBT_IBS_LT_20', 'VBT_IBS_LT_25'] |
-| `hftbacktest_queue_parity_ref` | `True` | `STOP_CHECK_BEFORE_MFE_UPDATE + Almgren-Chriss 1x/2x` | 30 pre-wall symbol x strategy queue-parity sims (0 intrabar lookahead) |
+| `hftbacktest` | `True` | `2.4.2` | Rust hftbacktest v2.4.2 HashMapMarketDepthBacktest + RiskAdverseQueueModel: 12 real pre-wall L1 slices, 1,138,548 depth+trade events, 11/12 passive maker fills (91.7%), mean markout -48.37 bps |
 | `ml4t_diagnostic` | `True` | `0.2.0` | DSR=0.0065, WRC p=0.0775, MinTRL finite=True (honest fail-closed) |
-| `nautilus_trader` | `True` | `2.0.0rc9` | BacktestEngine Rust-core XNAS NETTING/MARGIN verified (run_ok=True, iterations=0) |
+| `nautilus_trader` | `True` | `2.0.0rc9` | Full-resolution Rust BacktestEngine replay: 15 Equity instruments, 10,500 pre-wall bars, 10,500 iterations, 654 orders (590 filled), 295 positions (ADR-0022 <=2.00% stop) |
 | `polars_duckdb_pandera_xnys` | `True` | `polars 2.1.0 / duckdb 2.0.0 / pandera 0.35.0 / xcals 4.13.2` | 700 official XNYS pre-wall sessions (2024-01-02..2026-10-15), 7,836,606 1m bars, 0 post-wall bytes, Pandera Float64 PASS |
+| `rtx4090_gpu_cuda` | `True` | `torch-cuda / NVIDIA GeForce RTX 4090` | NVIDIA GeForce RTX 4090 (cuda:0) 10,000-rep circular block bootstrap in 332.31 ms: median SR=+1.179, CI95=[0.0739, 2.2717], P(SR>0)=0.982 |
 | `skfolio` | `True` | `1.12.7` | CombinatorialPurgedCV C(6,2)=15 purged+embargoed splits; median OOS SR=+1.198 |
 | `statsmodels` | `True` | `0.15.0` | OLS Newey-West HAC max_t=+2.0612 across 4 strategies |
 | `vectorbt` | `True` | `1.2.0` | 4 plateau sweeps over 15 symbols x 700 pre-wall sessions |
@@ -56,37 +58,37 @@
 
 ## 4. Live Regime-Conditioned Per-Symbol Factor & Strategy Routing
 
-- **Evaluated:** `54` · **Eligible:** `5` (Long `5`, Short `0`) · **Blocked:** `49` · **Pre-Wall Calibrated:** `18`
+- **Evaluated:** `49` · **Eligible:** `3` (Long `3`, Short `0`) · **Blocked:** `46` · **Pre-Wall Calibrated:** `16`
 
 | Symbol | Cluster | Eligible | Dir | Strategy | Score | EB Post bps | Stop % | Trail bps | Size Scale | Paper Lane | Reasons |
 | :--- | :--- | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | :--- | :--- |
-| `MU` | `HIGH_BETA_SEMI` | `True` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 75.4 | +41.91 | 0.82% | 13.5 | 0.46x | `:8787` | `OK` |
-| `SQQQ` | `VOL_HEDGE_ETF` | `True` | `LONG` | `VIX_SPIKE_AND_CRUSH_REGIME_SURFER` | 70.9 | +23.79 | 0.60% | 10.0 | 0.46x | `:8787` | `OK` |
-| `SOXL` | `VOL_HEDGE_ETF` | `True` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 63.4 | +2.00 | 1.94% | 14.0 | 0.41x | `:8787` | `OK` |
-| `TQQQ` | `VOL_HEDGE_ETF` | `True` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 60.5 | +2.00 | 0.58% | 9.7 | 0.41x | `:8787` | `OK` |
-| `NVDA` | `HIGH_BETA_SEMI` | `True` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 57.7 | +45.74 | 0.41% | 6.8 | 0.46x | `:8787` | `OK` |
-| `AVGO` | `HIGH_BETA_SEMI` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 73.4 | +49.87 | 0.50% | 8.5 | 0.46x | `:8787` | `SEC_90D_DILUTION_LONG_BLOCK, SPREAD_EXCEEDS_COLLAR:27.7>6.8` |
-| `SSMR` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 63.2 | +1.00 | 1.53% | 12.0 | 0.40x | `:8787` | `SPREAD_EXCEEDS_COLLAR:2661.5>23.8` |
-| `UVXY` | `VOL_HEDGE_ETF` | `False` | `LONG` | `VIX_SPIKE_AND_CRUSH_REGIME_SURFER` | 61.3 | +95.48 | 0.80% | 10.5 | 0.46x | `:8787` | `SPREAD_EXCEEDS_COLLAR:89.5>10.2` |
-| `NAVI` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 59.1 | -0.75 | 0.97% | 14.0 | 0.38x | `:8787` | `SPREAD_EXCEEDS_COLLAR:597.0>12.75` |
-| `PXLW` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 58.9 | +1.00 | 1.52% | 12.0 | 0.40x | `:8787` | `SPREAD_EXCEEDS_COLLAR:461.7>23.8` |
-| `GPN` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 58.1 | -2.82 | 1.56% | 12.0 | 0.36x | `:8787` | `SPREAD_EXCEEDS_COLLAR:420.2>23.8` |
-| `DAMD` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 56.9 | +16.87 | 1.55% | 12.0 | 0.46x | `:8787` | `SPREAD_EXCEEDS_COLLAR:25.8>23.8` |
-| `CVS` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 56.7 | +0.58 | 1.56% | 12.0 | 0.39x | `:8787` | `SPREAD_EXCEEDS_COLLAR:141.2>23.8` |
-| `BIPC` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 56.2 | -2.06 | 1.57% | 12.0 | 0.37x | `:8787` | `SPREAD_EXCEEDS_COLLAR:144.7>23.8` |
-| `SEI` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 55.6 | +0.50 | 1.55% | 12.0 | 0.39x | `:8787` | `SPREAD_EXCEEDS_COLLAR:675.1>23.8` |
-| `TSM` | `HIGH_BETA_SEMI` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 55.6 | +11.75 | 0.68% | 10.7 | 0.46x | `:8787` | `SPREAD_EXCEEDS_COLLAR:12.4>8.5` |
-| `AKAN` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 53.3 | -7.82 | 1.37% | 12.0 | 0.32x | `:8787` | `SPREAD_EXCEEDS_COLLAR:45.6>23.8` |
-| `BILL` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 51.7 | +0.50 | 1.01% | 14.0 | 0.39x | `:8787` | `SPREAD_EXCEEDS_COLLAR:32.5>12.75` |
-| `CMCT` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 50.6 | +4.58 | 1.52% | 12.0 | 0.43x | `:8787` | `INSUFFICIENT_LONG_OFI_ALIGNMENT, SPREAD_EXCEEDS_COLLAR:2677.2>23.8` |
-| `AMD` | `HIGH_BETA_SEMI` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 50.0 | +46.74 | 0.73% | 11.5 | 0.46x | `:8787` | `SEC_90D_DILUTION_LONG_BLOCK, INSUFFICIENT_LONG_OFI_ALIGNMENT, SPREAD_EXCEEDS_COLLAR:16.1>8.5` |
-| `EVH` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 49.9 | -1.44 | 1.54% | 12.0 | 0.37x | `:8787` | `SPREAD_EXCEEDS_COLLAR:204.1>23.8` |
-| `YSWY` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 49.2 | -4.53 | 1.54% | 12.0 | 0.35x | `:8787` | `SPREAD_EXCEEDS_COLLAR:478.7>23.8` |
-| `VIXY` | `VOL_HEDGE_ETF` | `False` | `LONG` | `VIX_SPIKE_AND_CRUSH_REGIME_SURFER` | 49.1 | +21.36 | 0.82% | 13.8 | 0.46x | `:8787` | `SPREAD_EXCEEDS_COLLAR:97.5>12.75` |
-| `GAP` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 47.3 | -1.18 | 0.90% | 14.0 | 0.38x | `:8787` | `SPREAD_EXCEEDS_COLLAR:123.6>12.75` |
-| `SOXS` | `VOL_HEDGE_ETF` | `False` | `LONG` | `VIX_SPIKE_AND_CRUSH_REGIME_SURFER` | 46.4 | +34.52 | 1.21% | 14.0 | 0.46x | `:8787` | `SPREAD_EXCEEDS_COLLAR:20.0>12.75` |
-| `BNAI` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 45.8 | -4.99 | 1.54% | 12.0 | 0.34x | `:8787` | `SPREAD_EXCEEDS_COLLAR:152.7>23.8` |
-| `CARL` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 45.3 | +1.00 | 1.55% | 12.0 | 0.40x | `:8787` | `SPREAD_EXCEEDS_COLLAR:1472.0>23.8` |
-| `SNDK` | `HIGH_BETA_SEMI` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 44.4 | +1.50 | 1.60% | 14.0 | 0.40x | `:8787` | `INSUFFICIENT_LONG_OFI_ALIGNMENT` |
-| `GLOB` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 44.2 | -6.83 | 1.56% | 12.0 | 0.32x | `:8787` | `SPREAD_EXCEEDS_COLLAR:549.0>23.8` |
-| `VXX` | `VOL_HEDGE_ETF` | `False` | `LONG` | `VIX_SPIKE_AND_CRUSH_REGIME_SURFER` | 43.9 | +23.70 | 0.82% | 13.3 | 0.46x | `:8787` | `INSUFFICIENT_LONG_OFI_ALIGNMENT, SPREAD_EXCEEDS_COLLAR:71.0>12.75` |
+| `NVDA` | `HIGH_BETA_SEMI` | `True` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 81.0 | +45.74 | 0.41% | 6.8 | 0.50x | `:8787` | `OK` |
+| `SOXL` | `VOL_HEDGE_ETF` | `True` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 73.3 | +2.00 | 1.94% | 14.0 | 0.45x | `:8787` | `OK` |
+| `SNDK` | `HIGH_BETA_SEMI` | `True` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 46.7 | +1.50 | 1.60% | 14.0 | 0.44x | `:8787` | `OK` |
+| `TQQQ` | `VOL_HEDGE_ETF` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 80.5 | +22.15 | 0.60% | 9.7 | 0.50x | `:8787` | `SPREAD_EXCEEDS_COLLAR:7.1>6.8` |
+| `CRWD` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 72.4 | +2.63 | 0.76% | 12.8 | 0.45x | `:8787` | `SEC_90D_DILUTION_LONG_BLOCK, SPREAD_EXCEEDS_COLLAR:16.4>8.5` |
+| `MU` | `HIGH_BETA_SEMI` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 66.4 | +41.91 | 0.82% | 13.5 | 0.50x | `:8787` | `SPREAD_EXCEEDS_COLLAR:8.6>8.5` |
+| `VXZ` | `VOL_HEDGE_ETF` | `False` | `LONG` | `VIX_SPIKE_AND_CRUSH_REGIME_SURFER` | 65.2 | +2.00 | 1.10% | 12.0 | 0.45x | `:8787` | `SPREAD_EXCEEDS_COLLAR:1768.3>15.3` |
+| `LSAK` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 64.5 | +1.00 | 1.26% | 12.0 | 0.44x | `:8787` | `SPREAD_EXCEEDS_COLLAR:613.9>23.8` |
+| `SSMR` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 61.7 | -6.48 | 1.50% | 12.0 | 0.36x | `:8787` | `SPREAD_EXCEEDS_COLLAR:3313.9>23.8` |
+| `UVXY` | `VOL_HEDGE_ETF` | `False` | `LONG` | `VIX_SPIKE_AND_CRUSH_REGIME_SURFER` | 60.4 | +97.20 | 0.82% | 10.5 | 0.50x | `:8787` | `SPREAD_EXCEEDS_COLLAR:51.0>10.2` |
+| `PXLW` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 57.4 | +1.00 | 1.52% | 12.0 | 0.44x | `:8787` | `SPREAD_EXCEEDS_COLLAR:461.7>23.8` |
+| `NAVI` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 56.9 | -4.76 | 0.98% | 14.0 | 0.38x | `:8787` | `SPREAD_EXCEEDS_COLLAR:1591.5>12.75` |
+| `BILL` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 55.6 | +0.50 | 1.01% | 14.0 | 0.43x | `:8787` | `INSUFFICIENT_LONG_OFI_ALIGNMENT, SPREAD_EXCEEDS_COLLAR:19.5>12.75` |
+| `TSM` | `HIGH_BETA_SEMI` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 55.6 | +11.75 | 0.68% | 10.7 | 0.50x | `:8787` | `SPREAD_EXCEEDS_COLLAR:12.3>8.5` |
+| `SEI` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 55.4 | +0.50 | 1.56% | 12.0 | 0.43x | `:8787` | `SPREAD_EXCEEDS_COLLAR:517.9>23.8` |
+| `SQQQ` | `VOL_HEDGE_ETF` | `False` | `LONG` | `VIX_SPIKE_AND_CRUSH_REGIME_SURFER` | 55.2 | +25.51 | 0.59% | 10.0 | 0.50x | `:8787` | `INSUFFICIENT_LONG_OFI_ALIGNMENT` |
+| `AMD` | `HIGH_BETA_SEMI` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 53.8 | +46.74 | 0.73% | 11.5 | 0.50x | `:8787` | `SEC_90D_DILUTION_LONG_BLOCK, SPREAD_EXCEEDS_COLLAR:9.3>8.5` |
+| `GPN` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 53.5 | -2.44 | 1.57% | 12.0 | 0.40x | `:8787` | `SPREAD_EXCEEDS_COLLAR:211.7>23.8` |
+| `AVGO` | `HIGH_BETA_SEMI` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 52.1 | +49.87 | 0.50% | 8.5 | 0.50x | `:8787` | `SEC_90D_DILUTION_LONG_BLOCK, SPREAD_EXCEEDS_COLLAR:19.4>6.8` |
+| `SOXS` | `VOL_HEDGE_ETF` | `False` | `LONG` | `VIX_SPIKE_AND_CRUSH_REGIME_SURFER` | 49.3 | +36.24 | 1.21% | 14.0 | 0.50x | `:8787` | `INSUFFICIENT_LONG_OFI_ALIGNMENT, SPREAD_EXCEEDS_COLLAR:12.9>12.75` |
+| `DAMD` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 48.8 | +17.26 | 1.57% | 12.0 | 0.50x | `:8787` | `SPREAD_EXCEEDS_COLLAR:86.9>23.8` |
+| `GAP` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 48.5 | -0.79 | 0.90% | 14.0 | 0.42x | `:8787` | `SPREAD_EXCEEDS_COLLAR:47.5>12.75` |
+| `UVIX` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 47.7 | +12.12 | 1.56% | 12.0 | 0.50x | `:8787` | `SPREAD_EXCEEDS_COLLAR:125.8>23.8` |
+| `YSWY` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 46.5 | -8.54 | 1.54% | 12.0 | 0.34x | `:8787` | `SPREAD_EXCEEDS_COLLAR:509.7>23.8` |
+| `CARL` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 45.7 | +1.00 | 1.55% | 12.0 | 0.44x | `:8787` | `SPREAD_EXCEEDS_COLLAR:1472.0>23.8` |
+| `GLOB` | `BROAD_LIQUID` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 44.2 | -6.44 | 1.56% | 12.0 | 0.36x | `:8787` | `SPREAD_EXCEEDS_COLLAR:1456.3>23.8` |
+| `BNAI` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 43.7 | -8.99 | 1.51% | 12.0 | 0.34x | `:8787` | `SPREAD_EXCEEDS_COLLAR:238.1>23.8` |
+| `CSQ` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 43.1 | +1.00 | 1.54% | 12.0 | 0.44x | `:8787` | `SPREAD_EXCEEDS_COLLAR:1058.6>23.8` |
+| `CSIQ` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 42.5 | +1.00 | 1.45% | 12.0 | 0.44x | `:8787` | `SPREAD_EXCEEDS_COLLAR:96.3>23.8` |
+| `YLDS` | `CATALYST_MIDCAP` | `False` | `LONG` | `H08_FIRST_HAND_CATALYST_IGNITION` | 42.5 | +1.00 | 1.54% | 12.0 | 0.44x | `:8787` | `SPREAD_EXCEEDS_COLLAR:9995.8>23.8` |

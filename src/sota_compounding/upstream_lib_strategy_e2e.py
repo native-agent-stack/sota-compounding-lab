@@ -32,6 +32,7 @@ Governance: `PROTECTIVE_FILTER_OR_GOVERNANCE`, `standalone_alpha_claim = False`,
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import math
@@ -1255,8 +1256,13 @@ def build_upstream_lib_e2e_manifest(
     prewall_sim_summary: Sequence[Mapping[str, Any]],
     cumulative_trials_n: int = 109,
     generated_at_utc: str = "",
+    strict_full_resolution: bool = False,
 ) -> dict[str, Any]:
     """Assemble and SHA-256-seal the dimensionless E2E Upstream-Library & Regime Per-Symbol Manifest."""
+    fr_audit = enforce_full_resolution_zero_fallback_gate(upstream_library_runs, require_all_engines=True)
+    if strict_full_resolution and not fr_audit["full_resolution_verified"]:
+        raise ValueError("FAIL_CLOSED_FULL_RESOLUTION_VIOLATION: " + "; ".join(fr_audit["violations"]))
+
     hlz_next = hlz_dynamic_t_hurdle(max(1, int(cumulative_trials_n) + 1))
     eligible_plans = [p for p in target_plans if p.eligible]
     any_2x_pass = any(bool(r.get("survives_2x_cost")) for r in prewall_sim_summary)
@@ -1278,7 +1284,10 @@ def build_upstream_lib_e2e_manifest(
             "paper_only_live_refused": True,
             "forbidden_live_ports": [4001, 7496, 8796, 8798],
             "dimensionless_privacy_firewall": True,
+            "full_resolution_only": True,
+            "allow_silent_fallback": False,
         },
+        "full_resolution_audit": fr_audit,
         "upstream_platforms": {
             tier: [dict(item) for item in items] for tier, items in SOTA_UPSTREAM_BACKTEST_PLATFORMS.items()
         },
@@ -1347,6 +1356,15 @@ def render_upstream_lib_e2e_markdown(manifest: Mapping[str, Any]) -> str:
             f"`take_profit_cap_enabled={gov['take_profit_cap_enabled']}` · "
             f"`paper_only_live_refused={gov['paper_only_live_refused']}` "
             f"(live ports `{gov['forbidden_live_ports']}` refused)"
+        ),
+        (
+            f"- **Full-Resolution Backbone (`ADR-0038`):** "
+            f"`full_resolution_verified={manifest.get('full_resolution_audit', {}).get('full_resolution_verified')}` · "
+            f"`allow_silent_fallback=False` · "
+            f"`residual_fallbacks_count="
+            f"{manifest.get('full_resolution_audit', {}).get('residual_fallbacks_count', 0)}` · "
+            f"`engines_verified={manifest.get('full_resolution_audit', {}).get('engines_verified_n', 0)}/"
+            f"{manifest.get('full_resolution_audit', {}).get('required_engines_n', 0)}`"
         ),
         "",
         "## 1. Live Multi-Horizon Market Situation",
@@ -1506,3 +1524,267 @@ def enforce_tier0_sota_source_only_sim_gate(
         "primary_literature": lit,
         "rejection_reasons": reasons,
     }
+
+
+FULL_RESOLUTION_RULE_SCHEMA = "sota.full-resolution-zero-fallback-rule.v1"
+FULL_RESOLUTION_RULE_ADR = "ADR-0038"
+
+REQUIRED_FULL_RESOLUTION_ENGINES: tuple[str, ...] = (
+    "polars_duckdb_pandera_xnys",
+    "nautilus_trader",
+    "hftbacktest",
+    "vectorbt",
+    "statsmodels",
+    "skfolio",
+    "ml4t_diagnostic",
+    "bashtage_arch",
+    "rtx4090_gpu_cuda",
+)
+
+FORBIDDEN_RESIDUAL_OR_FALLBACK_RUN_KEYS: frozenset[str] = frozenset(
+    {
+        "hftbacktest_queue_parity_ref",
+        "cpu_fallback",
+        "python_bar_loop_fallback",
+        "synthetic_smoke",
+        "nautilus_boot_only",
+        "vectorbt_nautilus",
+        "econometric_battery",
+    }
+)
+
+_FORBIDDEN_VERSION_TOKENS: frozenset[str] = frozenset(
+    {"", "n/a", "none", "unavailable", "fallback", "stub", "mock", "synthetic"}
+)
+
+
+def _pos_int(val: Any) -> int:
+    if isinstance(val, bool) or val is None:
+        return 0
+    try:
+        iv = int(val)
+    except (TypeError, ValueError):
+        return 0
+    return iv if iv > 0 else 0
+
+
+def enforce_full_resolution_zero_fallback_gate(
+    upstream_library_runs: Mapping[str, Any],
+    *,
+    require_all_engines: bool = True,
+) -> dict[str, Any]:
+    """Fail-closed Tier-0 Full-Resolution, Always-Full-Resolution, Zero-Residual, Zero-Fallback Gate (`ADR-0038`).
+
+    Permanently blocks:
+    - Empty `NautilusTrader` `BacktestEngine` boot checks (`iterations=0`, missing instruments/data/strategies/fills).
+    - Pure-Python residual bar loops masquerading as `hftbacktest` (`hftbacktest_queue_parity_ref` or non-Rust engine).
+    - Silent CPU / synthetic / degraded fallbacks (`fallback_used=True`, `synthetic=True`, `degraded=True`).
+    - Missing GPU CUDA verification on `rtx4090_gpu_cuda` (`device` must start with `cuda`).
+    - Any post-wall (`> 2026-10-15`) data contamination.
+    """
+    violations: list[str] = []
+    residual_fallbacks_count = 0
+    engines_verified: list[str] = []
+
+    if not isinstance(upstream_library_runs, Mapping) or not upstream_library_runs:
+        violations.append("FULL_RES_EMPTY_UPSTREAM_RUNS")
+        return {
+            "schema": FULL_RESOLUTION_RULE_SCHEMA,
+            "adr": FULL_RESOLUTION_RULE_ADR,
+            "full_resolution_verified": False,
+            "allow_silent_fallback": False,
+            "residual_fallbacks_count": 1,
+            "engines_verified_n": 0,
+            "required_engines_n": len(REQUIRED_FULL_RESOLUTION_ENGINES),
+            "engines_verified": [],
+            "violations": violations,
+        }
+
+    for key in sorted(upstream_library_runs.keys()):
+        if key in FORBIDDEN_RESIDUAL_OR_FALLBACK_RUN_KEYS:
+            residual_fallbacks_count += 1
+            violations.append(f"FORBIDDEN_RESIDUAL_OR_FALLBACK_ENGINE:{key}")
+
+    if require_all_engines:
+        for req_eng in REQUIRED_FULL_RESOLUTION_ENGINES:
+            if req_eng not in upstream_library_runs:
+                violations.append(f"MISSING_REQUIRED_FULL_RES_ENGINE:{req_eng}")
+
+    for eng_name, raw_entry in sorted(upstream_library_runs.items()):
+        if eng_name in FORBIDDEN_RESIDUAL_OR_FALLBACK_RUN_KEYS:
+            continue
+        if not isinstance(raw_entry, Mapping):
+            violations.append(f"MALFORMED_ENGINE_ENTRY:{eng_name}")
+            continue
+
+        entry_ok = True
+        if raw_entry.get("executed") is not True:
+            entry_ok = False
+            violations.append(f"ENGINE_NOT_EXECUTED:{eng_name}")
+
+        for flag_key in ("fallback_used", "synthetic", "degraded", "residual_loop_used"):
+            if raw_entry.get(flag_key) is True:
+                entry_ok = False
+                residual_fallbacks_count += 1
+                violations.append(f"FORBIDDEN_FALLBACK_OR_SYNTHETIC_FLAG:{eng_name}:{flag_key}")
+
+        ver = str(raw_entry.get("version") or "").strip().lower()
+        if ver in _FORBIDDEN_VERSION_TOKENS or "fallback" in ver or "err" in ver:
+            entry_ok = False
+            violations.append(f"INVALID_OR_FALLBACK_VERSION:{eng_name}:{ver}")
+
+        summary_low = str(raw_entry.get("summary") or "").lower()
+        if "iterations=0" in summary_low or "boot_error" in summary_low or "fallback" in summary_low:
+            entry_ok = False
+            residual_fallbacks_count += 1
+            violations.append(f"FORBIDDEN_STUB_OR_FALLBACK_SUMMARY:{eng_name}")
+
+        post_wall = raw_entry.get("post_wall_n")
+        if isinstance(post_wall, int) and not isinstance(post_wall, bool) and post_wall > 0:
+            entry_ok = False
+            violations.append(f"POST_WALL_CONTAMINATION:{eng_name}:post_wall_n={post_wall}")
+
+        # Engine-specific full-resolution execution physics verification
+        if eng_name == "nautilus_trader":
+            if _pos_int(raw_entry.get("iterations")) <= 0:
+                entry_ok = False
+                residual_fallbacks_count += 1
+                violations.append("NAUTILUS_ZERO_ITERATIONS_BOOT_STUB")
+            if _pos_int(raw_entry.get("instruments_n")) < 1:
+                entry_ok = False
+                violations.append("NAUTILUS_ZERO_INSTRUMENTS")
+            if _pos_int(raw_entry.get("bars_or_ticks_loaded")) <= 0:
+                entry_ok = False
+                violations.append("NAUTILUS_ZERO_BARS_OR_TICKS_LOADED")
+            if _pos_int(raw_entry.get("strategies_n")) < 1:
+                entry_ok = False
+                violations.append("NAUTILUS_ZERO_STRATEGIES")
+            if _pos_int(raw_entry.get("orders_total")) <= 0 or _pos_int(raw_entry.get("fills_total")) <= 0:
+                entry_ok = False
+                violations.append("NAUTILUS_ZERO_ORDERS_OR_FILLS")
+
+        elif eng_name == "hftbacktest":
+            if str(raw_entry.get("engine_kind") or "") != "RUST_HFTBACKTEST_HASHMAP_DEPTH":
+                entry_ok = False
+                residual_fallbacks_count += 1
+                violations.append("HFTBACKTEST_NON_RUST_OR_RESIDUAL_ENGINE")
+            if str(raw_entry.get("queue_model") or "") != "RiskAdverseQueueModel":
+                entry_ok = False
+                violations.append("HFTBACKTEST_MISSING_RISK_ADVERSE_QUEUE_MODEL")
+            if _pos_int(raw_entry.get("slices_replayed")) < 1 or _pos_int(raw_entry.get("events_replayed")) <= 0:
+                entry_ok = False
+                violations.append("HFTBACKTEST_ZERO_REAL_L1_EVENTS")
+
+        elif eng_name == "polars_duckdb_pandera_xnys":
+            if _pos_int(raw_entry.get("sessions_n")) < 60:
+                entry_ok = False
+                violations.append("LAKE_INSUFFICIENT_PREWALL_SESSIONS")
+            if _pos_int(raw_entry.get("total_1m_bars_aggregated")) <= 0:
+                entry_ok = False
+                violations.append("LAKE_ZERO_1M_BARS")
+            if raw_entry.get("non_xnys_n", 0) != 0:
+                entry_ok = False
+                violations.append("LAKE_NON_XNYS_SESSIONS_PRESENT")
+
+        elif eng_name == "vectorbt":
+            plateaus = raw_entry.get("plateau_results")
+            if not isinstance(plateaus, Sequence) or isinstance(plateaus, (str, bytes)) or len(plateaus) < 1:
+                entry_ok = False
+                violations.append("VECTORBT_EMPTY_PLATEAU_RESULTS")
+
+        elif eng_name == "skfolio":
+            if _pos_int(raw_entry.get("cpcv_splits_n")) < 10:
+                entry_ok = False
+                violations.append("SKFOLIO_INSUFFICIENT_CPCV_SPLITS")
+
+        elif eng_name == "ml4t_diagnostic":
+            dsr_v = raw_entry.get("dsr_probability")
+            wrc_v = raw_entry.get("whites_rc_p")
+            if not (
+                isinstance(dsr_v, (int, float))
+                and not isinstance(dsr_v, bool)
+                and math.isfinite(float(dsr_v))
+                and isinstance(wrc_v, (int, float))
+                and not isinstance(wrc_v, bool)
+                and math.isfinite(float(wrc_v))
+            ):
+                entry_ok = False
+                violations.append("ML4T_DIAGNOSTIC_NON_FINITE_METRICS")
+
+        elif eng_name == "bashtage_arch":
+            spa_v = raw_entry.get("spa_p_consistent")
+            mcs_set = raw_entry.get("mcs_surviving_set")
+            if not (
+                isinstance(spa_v, (int, float))
+                and not isinstance(spa_v, bool)
+                and math.isfinite(float(spa_v))
+                and isinstance(mcs_set, Sequence)
+                and not isinstance(mcs_set, (str, bytes))
+                and len(mcs_set) >= 1
+            ):
+                entry_ok = False
+                violations.append("ARCH_INVALID_SPA_OR_MCS")
+
+        elif eng_name == "rtx4090_gpu_cuda":
+            dev = str(raw_entry.get("device") or "").lower()
+            if not dev.startswith("cuda"):
+                entry_ok = False
+                residual_fallbacks_count += 1
+                violations.append(f"GPU_CUDA_REQUIRED_NO_CPU_FALLBACK:{dev}")
+            if _pos_int(raw_entry.get("n_boot")) < 1000:
+                entry_ok = False
+                violations.append("GPU_BOOTSTRAP_INSUFFICIENT_REPS")
+
+        if entry_ok and eng_name in REQUIRED_FULL_RESOLUTION_ENGINES:
+            engines_verified.append(eng_name)
+
+    return {
+        "schema": FULL_RESOLUTION_RULE_SCHEMA,
+        "adr": FULL_RESOLUTION_RULE_ADR,
+        "full_resolution_verified": len(violations) == 0,
+        "allow_silent_fallback": False,
+        "residual_fallbacks_count": residual_fallbacks_count,
+        "engines_verified_n": len(engines_verified),
+        "required_engines_n": len(REQUIRED_FULL_RESOLUTION_ENGINES),
+        "engines_verified": sorted(engines_verified),
+        "violations": violations,
+    }
+
+
+def _collect_call_names(tree: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            fn = node.func
+            if isinstance(fn, ast.Name):
+                names.add(fn.id)
+            elif isinstance(fn, ast.Attribute):
+                names.add(fn.attr)
+    return names
+
+
+def audit_python_source_for_full_resolution(source_text: str, rel_path: str) -> list[str]:
+    """Static AST audit blocking empty `BacktestEngine` boot stubs (including embedded inline scripts)."""
+    issues: list[str] = []
+    try:
+        tree = ast.parse(source_text)
+    except SyntaxError:
+        return issues
+
+    candidate_trees: list[tuple[str, ast.AST]] = [(rel_path, tree)]
+    # Also inspect inline Python strings passed to subprocesses (e.g., `code = r\"\"\"...\"\"\"`)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and "BacktestEngine(" in node.value:
+            try:
+                sub_tree = ast.parse(node.value)
+                candidate_trees.append((f"{rel_path}<inline>", sub_tree))
+            except SyntaxError:
+                pass
+
+    for label, sub in candidate_trees:
+        calls = _collect_call_names(sub)
+        if "BacktestEngine" in calls and "run" in calls:
+            missing = [req for req in ("add_instrument", "add_data", "add_strategy") if req not in calls]
+            if missing:
+                issues.append(f"{label}: EMPTY_NAUTILUS_BACKTEST_ENGINE_STUB — BacktestEngine.run() missing {missing}")
+    return issues

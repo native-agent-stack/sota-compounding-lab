@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Run Real Pinned SOTA Upstream-Library E2E Sim + Live Regime-Conditioned Per-Symbol Routing (`ADR-0035`).
+"""Run Full-Resolution Pinned SOTA Upstream-Library E2E Sim + Live Per-Symbol Routing (`ADR-0035` / `ADR-0038`).
 
-Executes authentic pinned upstream libraries strictly on pre-wall (`<= 2026-10-15`, `0` post-wall bytes)
-real split-adjusted SIP bars, then joins live `:8787` target telemetry + pre-wall 194-symbol calibrations
-to emit SHA-256-sealed `docs/SOTA_UPSTREAM_LIB_E2E_REGIME_PERSYMBOL_MANIFEST.{json,md}`:
+Executes authentic pinned upstream libraries at 100% FULL RESOLUTION (zero empty boot stubs, zero pure-Python
+residual fallbacks, zero silent CPU fallbacks) strictly on pre-wall (`<= 2026-10-15`, `0` post-wall bytes)
+real split-adjusted SIP bars & paired L1 quote+trade Parquet slices, then seals
+`docs/SOTA_UPSTREAM_LIB_E2E_REGIME_PERSYMBOL_MANIFEST.{json,md}` via `strict_full_resolution=True`:
 - `polars` (`py-2.1.0`) + `duckdb` (`v2.0.0`) + `pandera` (`v0.35.0`) + `exchange_calendars` (`4.13.2`)
-- `vectorbt` (`v1.2.0`) vectorized plateau sweep (`Portfolio.from_signals`)
-- `nautilus_trader` (`v2.0.0rc9`) Rust-core `BacktestEngine` venue/instrument execution parity
-- `hftbacktest`-parity `simulate_queue_parity_e2e_bar_series` (`STOP_CHECK_BEFORE_MFE_UPDATE`, `1x`/`2x` impact)
+- `vectorbt` (`v1.2.0`) vectorized multi-parameter plateau sweep (`Portfolio.from_signals`)
+- `nautilus_trader` (`v2.0.0rc9`) Rust `BacktestEngine` REAL multi-symbol `Strategy` replay (`iterations > 0`, fills)
+- `hftbacktest` (`v2.4.2`) Rust `HashMapMarketDepthBacktest` + `RiskAdverseQueueModel` REAL pre-wall L1 tick replay
 - `statsmodels` (`v0.15.0` OLS HAC) + `skfolio` (`v1.12.7` `CombinatorialPurgedCV`) +
   `ml4t-diagnostic` (`v0.2.0` DSR/PBO/MinTRL) + `bashtage/arch` (`v9.0.0` Hansen SPA & HLN MCS)
-- Live multi-horizon market situation + Hierarchical EB per-symbol factor routing (paper-only `:8787`).
+- `rtx4090_gpu_cuda` live `:8794` CUDA 10,000-rep circular block bootstrap (`require_gpu=True`, zero CPU fallback).
 """
 
 from __future__ import annotations
@@ -268,23 +269,41 @@ def _run_vectorbt_and_nautilus_via_meridian_venv(
     meridian_py: pathlib.Path,
     by_symbol: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
-    """Execute genuine VectorBT v1.2.0 plateau sweep & NautilusTrader v2.0.0rc9 BacktestEngine parity."""
+    """Execute genuine VectorBT v1.2.0 plateau sweep & FULL-RESOLUTION NautilusTrader v2.0.0rc9 Strategy replay."""
     code = r"""
 import json, sys, math
+from collections import deque
+from datetime import datetime, timezone
 from decimal import Decimal
 import numpy as np
 import pandas as pd
 import vectorbt as vbt
 import nautilus_trader
 from nautilus_trader.backtest import BacktestEngine, BacktestEngineConfig
-from nautilus_trader.execution import MakerTakerFeeModel
+from nautilus_trader.common import LoggerConfig, LogLevel
+from nautilus_trader.execution import MakerTakerFeeModel, StaticLatencyModel
 from nautilus_trader.model import (
     AccountType,
+    AggregationSource,
+    Bar,
+    BarAggregation,
+    BarSpecification,
+    BarType,
     Currency,
+    Equity,
+    InstrumentId,
     Money,
     OmsType,
+    OrderSide,
+    Price,
+    PriceType,
+    Quantity,
+    StrategyId,
+    Symbol,
+    TimeInForce,
     Venue,
 )
+from nautilus_trader.trading import Strategy, StrategyConfig
 
 payload = json.loads(sys.stdin.read())
 by_sym = payload["by_symbol"]
@@ -346,34 +365,169 @@ plateau_results.append({
     "mean_daily_2x_bps": round(float(bo_ret_2x.mean() * 10000.0), 4),
 })
 
-# 2. Real NautilusTrader v2.0.0rc9 Rust-core BacktestEngine venue & execution parity boot check
-nt_ok = False
-nt_summary = ""
-try:
-    cfg = BacktestEngineConfig(bypass_logging=True)
-    engine = BacktestEngine(config=cfg)
-    engine.add_venue(
-        venue=Venue("XNAS"),
-        oms_type=OmsType.NETTING,
-        account_type=AccountType.MARGIN,
-        starting_balances=[Money(100_000, Currency.from_str("USD"))],
-        fee_model=MakerTakerFeeModel(Decimal("0.0001"), Decimal("0.0005")),
+# 2. FULL-RESOLUTION NautilusTrader v2.0.0rc9 Rust-core BacktestEngine Strategy Replay
+# Loads all real pre-wall split-adjusted Equity bars and executes real ADR-0022 <= 2.00% stop-protected
+# 20d Breakout / 10d Breakdown Strategy through the native Rust matching engine (ZERO iterations=0 stubs).
+class SotaBreakoutParityStrategy(Strategy):
+    def __init__(self, bar_types: list[BarType]) -> None:
+        super().__init__(StrategyConfig(strategy_id=StrategyId("SOTA-BREAKOUT-PARITY-001")))
+        self.bar_types = bar_types
+        self.highs: dict[InstrumentId, deque[float]] = {bt.instrument_id: deque(maxlen=20) for bt in bar_types}
+        self.lows: dict[InstrumentId, deque[float]] = {bt.instrument_id: deque(maxlen=10) for bt in bar_types}
+        self.bars_processed = 0
+        self.signals_evaluated = 0
+
+    def on_start(self) -> None:
+        for bt in self.bar_types:
+            self.subscribe_bars(bt)
+
+    def on_bar(self, bar: Bar) -> None:
+        self.bars_processed += 1
+        iid = bar.bar_type.instrument_id
+        hi_q = self.highs[iid]
+        lo_q = self.lows[iid]
+        c_px = float(bar.close)
+        h_px = float(bar.high)
+        l_px = float(bar.low)
+
+        if len(hi_q) == 20 and len(lo_q) == 10:
+            self.signals_evaluated += 1
+            prior_20h = max(hi_q)
+            prior_10l = min(lo_q)
+            is_flat = (
+                self.cache.positions_open_count(instrument_id=iid) == 0
+                and self.cache.orders_open_count(instrument_id=iid) == 0
+            )
+            if is_flat and c_px > prior_20h and c_px >= 2.50:
+                qty = max(1, int(5_000.0 / c_px))
+                entry_ord = self.order_factory.market(
+                    instrument_id=iid,
+                    order_side=OrderSide.BUY,
+                    quantity=Quantity.from_int(qty),
+                    time_in_force=TimeInForce.DAY,
+                )
+                self.submit_order(entry_ord)
+                # ADR-0022 <= 2.00% hard protective stop (1.75%, Reg NMS Rule 612 $0.01 quantized)
+                stop_px = math.floor(c_px * (1.0 - 0.0175) * 100.0) / 100.0
+                if stop_px >= 0.01:
+                    stop_ord = self.order_factory.stop_market(
+                        instrument_id=iid,
+                        order_side=OrderSide.SELL,
+                        quantity=Quantity.from_int(qty),
+                        trigger_price=Price.from_str(f"{stop_px:.2f}"),
+                        time_in_force=TimeInForce.GTC,
+                        reduce_only=True,
+                    )
+                    self.submit_order(stop_ord)
+            elif not is_flat and c_px < prior_10l:
+                self.cancel_all_orders(iid)
+                self.close_all_positions(iid)
+
+        hi_q.append(h_px)
+        lo_q.append(l_px)
+
+    def on_stop(self) -> None:
+        for bt in self.bar_types:
+            self.cancel_all_orders(bt.instrument_id)
+            self.close_all_positions(bt.instrument_id)
+
+cfg = BacktestEngineConfig(
+    logging=LoggerConfig(stdout_level=LogLevel.OFF, bypass_logging=True),
+    run_analysis=False,
+)
+engine = BacktestEngine(config=cfg)
+usd = Currency.from_str("USD")
+venue = Venue("XNAS")
+engine.add_venue(
+    venue=venue,
+    oms_type=OmsType.NETTING,
+    account_type=AccountType.MARGIN,
+    starting_balances=[Money(1_000_000, usd)],
+    fee_model=MakerTakerFeeModel(Decimal("0.0001"), Decimal("0.0005")),
+    latency_model=StaticLatencyModel(0),
+    bar_execution=True,
+    bar_adaptive_high_low_ordering=True,
+)
+
+bar_spec = BarSpecification(1, BarAggregation.DAY, PriceType.LAST)
+all_bars: list[Bar] = []
+bar_types: list[BarType] = []
+instruments_added = 0
+
+for sym in sorted(by_sym.keys()):
+    rows = by_sym[sym]
+    if len(rows) < 60:
+        continue
+    iid = InstrumentId(Symbol(sym), venue)
+    first_dt = datetime.strptime(rows[0]["date"], "%Y-%m-%d").replace(hour=16, tzinfo=timezone.utc)
+    t0_ns = int(first_dt.timestamp() * 1_000_000_000)
+    engine.add_instrument(
+        Equity(
+            instrument_id=iid,
+            raw_symbol=Symbol(sym),
+            currency=usd,
+            price_precision=2,
+            price_increment=Price.from_str("0.01"),
+            lot_size=Quantity.from_int(1),
+            ts_event=t0_ns,
+            ts_init=t0_ns,
+        )
     )
-    engine.run()
-    res = engine.get_result()
-    engine.dispose()
-    nt_ok = True
-    nt_summary = (
-        f"BacktestEngine Rust-core XNAS NETTING/MARGIN verified "
-        f"(run_ok=True, iterations={getattr(res, 'iterations', 0)})"
+    instruments_added += 1
+    bt = BarType(iid, bar_spec, AggregationSource.EXTERNAL)
+    bar_types.append(bt)
+    for r in rows:
+        dt_bar = datetime.strptime(r["date"], "%Y-%m-%d").replace(hour=20, tzinfo=timezone.utc)
+        ts_ns = int(dt_bar.timestamp() * 1_000_000_000)
+        o_v = max(0.01, round(float(r["open"]), 2))
+        h_v = max(o_v, round(float(r["high"]), 2))
+        l_v = max(0.01, min(o_v, round(float(r["low"]), 2)))
+        c_v = max(l_v, min(h_v, round(float(r["close"]), 2)))
+        vol_i = max(1, int(round(float(r["volume"]))))
+        all_bars.append(
+            Bar(
+                bt,
+                Price.from_str(f"{o_v:.2f}"),
+                Price.from_str(f"{h_v:.2f}"),
+                Price.from_str(f"{l_v:.2f}"),
+                Price.from_str(f"{c_v:.2f}"),
+                Quantity.from_int(vol_i),
+                ts_ns,
+                ts_ns,
+            )
+        )
+
+all_bars.sort(key=lambda b: (b.ts_event, str(b.bar_type.instrument_id)))
+engine.add_data(all_bars)
+strategy = SotaBreakoutParityStrategy(bar_types)
+engine.add_strategy(strategy)
+engine.run()
+res = engine.get_result()
+orders_all = engine.cache.orders()
+positions_all = engine.cache.positions()
+fills_n = sum(1 for o in orders_all if getattr(o, "filled_qty", Quantity.from_int(0)).as_double() > 0.0)
+iterations_n = int(getattr(res, "iterations", 0))
+total_orders_n = int(getattr(res, "total_orders", len(orders_all)))
+total_positions_n = int(getattr(res, "total_positions", len(positions_all)))
+engine.dispose()
+
+if iterations_n <= 0 or total_orders_n <= 0 or fills_n <= 0:
+    raise RuntimeError(
+        f"FAIL_CLOSED_NAUTILUS_FULL_RES: iterations={iterations_n}, orders={total_orders_n}, fills={fills_n}"
     )
-except Exception as exc:
-    nt_summary = f"nautilus_boot_error: {type(exc).__name__}: {exc}"
+
+nt_summary = (
+    f"Full-resolution Rust BacktestEngine replay: {instruments_added} Equity instruments, "
+    f"{len(all_bars):,} pre-wall bars, {iterations_n:,} iterations, "
+    f"{total_orders_n} orders ({fills_n} filled), {total_positions_n} positions (ADR-0022 <=2.00% stop)"
+)
 
 print("__SOTA_JSON__:" + json.dumps({
     "executed": True,
     "vectorbt": {
         "executed": True,
+        "synthetic": False,
+        "fallback_used": False,
         "version": vbt.__version__,
         "plateau_results": plateau_results,
         "summary": (
@@ -382,15 +536,315 @@ print("__SOTA_JSON__:" + json.dumps({
         ),
     },
     "nautilus_trader": {
-        "executed": nt_ok,
+        "executed": True,
+        "synthetic": False,
+        "fallback_used": False,
         "version": nautilus_trader.__version__,
+        "instruments_n": instruments_added,
+        "bars_or_ticks_loaded": len(all_bars),
+        "strategies_n": 1,
+        "iterations": iterations_n,
+        "bars_processed": int(strategy.bars_processed),
+        "signals_evaluated": int(strategy.signals_evaluated),
+        "orders_total": total_orders_n,
+        "fills_total": int(fills_n),
+        "positions_total": total_positions_n,
         "summary": nt_summary,
     },
     "dates": [d.strftime("%Y-%m-%d") for d in close_df.index],
     "daily_panel_2x": daily_panel_vbt,
 }, allow_nan=False))
 """
-    return _run_python_json(meridian_py, code, {"by_symbol": by_symbol}, timeout_sec=120)
+    return _run_python_json(meridian_py, code, {"by_symbol": by_symbol}, timeout_sec=180)
+
+
+def _run_real_hftbacktest_l1_via_noesis_carbon(
+    market_data_root: pathlib.Path,
+) -> dict[str, Any]:
+    """Execute authentic Rust `hftbacktest v2.4.2` `HashMapMarketDepthBacktest` + `RiskAdverseQueueModel`
+    over real pre-wall (`<= 2026-10-15`) paired L1 quote+trade Parquet slices inside `Noesis-Carbon` WSL2.
+    Zero pure-Python fallbacks; fails closed if Rust `hftbacktest` or real L1 slices are unavailable.
+    """
+    q_root = market_data_root / "published-orb" / "quotes"
+    t_root = market_data_root / "published-orb" / "trades"
+    if not q_root.is_dir() or not t_root.is_dir():
+        z_lake = pathlib.Path("Z:/sota-data/prewall-lake/published-orb")
+        q_root = z_lake / "quotes"
+        t_root = z_lake / "trades"
+
+    candidate_syms = (
+        "AMD",
+        "AVGO",
+        "MU",
+        "TSLA",
+        "MSFT",
+        "META",
+        "PLTR",
+        "MSTR",
+        "COIN",
+        "SMCI",
+        "GOOG",
+        "AMZN",
+    )
+    paired_slices: list[dict[str, str]] = []
+    for sym in candidate_syms:
+        qd = q_root / sym
+        td = t_root / sym
+        if not qd.is_dir() or not td.is_dir():
+            continue
+        q_files = sorted(
+            (p for p in qd.glob("*.parquet") if p.name[:10] <= STUDY_WALL_ISO),
+            key=lambda p: p.stat().st_size,
+            reverse=True,
+        )
+        for qf in q_files[:2]:
+            tf = td / qf.name
+            if tf.is_file():
+                # Convert Win32 drive path (e.g. Z:\... or C:\...) to WSL2 /mnt/<drive>/...
+                def _to_wsl(p: pathlib.Path) -> str:
+                    s = str(p.resolve())
+                    if len(s) >= 2 and s[1] == ":":
+                        return f"/mnt/{s[0].lower()}" + s[2:].replace("\\", "/")
+                    return s.replace("\\", "/")
+
+                paired_slices.append(
+                    {
+                        "symbol": sym,
+                        "date": qf.name[:10],
+                        "quote_path": _to_wsl(qf),
+                        "trade_path": _to_wsl(tf),
+                    }
+                )
+        if len(paired_slices) >= 12:
+            break
+
+    if not paired_slices:
+        return {"executed": False, "error": "FAIL_CLOSED_NO_PREWALL_L1_QUOTE_TRADE_SLICES"}
+
+    wsl_code = r"""
+import json, sys, math
+import numpy as np
+import pyarrow.parquet as pq
+import hftbacktest
+from hftbacktest import (
+    BUY_EVENT,
+    DEPTH_EVENT,
+    EXCH_EVENT,
+    GTX,
+    LIMIT,
+    LOCAL_EVENT,
+    SELL_EVENT,
+    TRADE_EVENT,
+    BacktestAsset,
+    HashMapMarketDepthBacktest,
+    event_dtype,
+)
+
+cfg = json.loads(sys.stdin.read())
+slices = cfg["slices"]
+wall_iso = cfg["wall_iso"]
+
+total_events = 0
+slices_ok = 0
+passive_orders = 0
+passive_fills = 0
+markouts_bps = []
+symbols_replayed = []
+
+for sl in slices:
+    if sl["date"] > wall_iso:
+        raise RuntimeError(f"PREWALL_VIOLATION: {sl['date']} > {wall_iso}")
+    qt = pq.read_table(sl["quote_path"], columns=["t_ns", "bp", "bs", "ap", "as"])
+    tr = pq.read_table(sl["trade_path"], columns=["t_ns", "p", "s"])
+    if qt.num_rows < 30 or tr.num_rows < 20:
+        continue
+
+    q_ts = qt["t_ns"].to_numpy(zero_copy_only=False).astype(np.int64)
+    bp = qt["bp"].to_numpy(zero_copy_only=False).astype(np.float64)
+    bs = qt["bs"].to_numpy(zero_copy_only=False).astype(np.float64)
+    ap = qt["ap"].to_numpy(zero_copy_only=False).astype(np.float64)
+    a_sz = qt["as"].to_numpy(zero_copy_only=False).astype(np.float64)
+    valid_q = np.isfinite(bp) & np.isfinite(ap) & (bp > 1.0) & (ap >= bp) & (bs > 0) & (a_sz > 0)
+    q_ts, bp, bs, ap, a_sz = q_ts[valid_q], bp[valid_q], bs[valid_q], ap[valid_q], a_sz[valid_q]
+
+    t_ts = tr["t_ns"].to_numpy(zero_copy_only=False).astype(np.int64)
+    tp = tr["p"].to_numpy(zero_copy_only=False).astype(np.float64)
+    tsz = tr["s"].to_numpy(zero_copy_only=False).astype(np.float64)
+    valid_t = np.isfinite(tp) & np.isfinite(tsz) & (tp > 1.0) & (tsz > 0)
+    t_ts, tp, tsz = t_ts[valid_t], tp[valid_t], tsz[valid_t]
+    if len(q_ts) < 30 or len(t_ts) < 20:
+        continue
+
+    lat_ns = 500_000  # 0.5 ms deterministic feed + order latency
+    n_ev = 2 * len(q_ts) + len(t_ts)
+    ev = np.zeros(n_ev, dtype=event_dtype)
+    q_bid_end = len(q_ts)
+    q_ask_end = 2 * len(q_ts)
+
+    ev[:q_bid_end]["ev"] = EXCH_EVENT | LOCAL_EVENT | DEPTH_EVENT | BUY_EVENT
+    ev[:q_bid_end]["exch_ts"] = q_ts
+    ev[:q_bid_end]["local_ts"] = q_ts + lat_ns
+    ev[:q_bid_end]["px"] = bp
+    ev[:q_bid_end]["qty"] = bs * 100.0  # SIP NBBO round-lot shares
+
+    ev[q_bid_end:q_ask_end]["ev"] = EXCH_EVENT | LOCAL_EVENT | DEPTH_EVENT | SELL_EVENT
+    ev[q_bid_end:q_ask_end]["exch_ts"] = q_ts
+    ev[q_bid_end:q_ask_end]["local_ts"] = q_ts + lat_ns
+    ev[q_bid_end:q_ask_end]["px"] = ap
+    ev[q_bid_end:q_ask_end]["qty"] = a_sz * 100.0
+
+    ev[q_ask_end:]["ev"] = EXCH_EVENT | LOCAL_EVENT | TRADE_EVENT | SELL_EVENT
+    ev[q_ask_end:]["exch_ts"] = t_ts
+    ev[q_ask_end:]["local_ts"] = t_ts + lat_ns
+    ev[q_ask_end:]["px"] = tp
+    ev[q_ask_end:]["qty"] = tsz
+
+    order_idx = np.argsort(ev["exch_ts"], kind="mergesort")
+    ev = np.ascontiguousarray(ev[order_idx])
+
+    asset = (
+        BacktestAsset()
+        .data(ev)
+        .linear_asset(1.0)
+        .constant_order_latency(lat_ns, lat_ns)
+        .risk_adverse_queue_model()
+        .partial_fill_exchange()
+        .trading_value_fee_model(-0.00002, 0.0003)
+        .tick_size(0.01)
+        .lot_size(1.0)
+    )
+    hbt = HashMapMarketDepthBacktest([asset])
+    step_ns = 1_000_000_000  # 1-second decision cadence over full nanosecond event feed
+    submitted = False
+    entry_px = 0.0
+    filled_slice = False
+    end_mid = 0.0
+    oid = 1001
+
+    while hbt.elapse(step_ns) == 0:
+        depth = hbt.depth(0)
+        bb = float(depth.best_bid)
+        ba = float(depth.best_ask)
+        if not (math.isfinite(bb) and math.isfinite(ba) and bb > 1.0 and ba >= bb):
+            continue
+        end_mid = 0.5 * (bb + ba)
+        pos = float(hbt.position(0))
+        if not submitted:
+            # Post passive maker limit bid at best bid (GTX) to test real RiskAdverseQueueModel queue depletion
+            entry_px = round(bb, 2)
+            hbt.submit_buy_order(0, oid, entry_px, 100.0, GTX, LIMIT, False)
+            submitted = True
+            passive_orders += 1
+        elif pos > 0.0 and not filled_slice:
+            filled_slice = True
+            passive_fills += 1
+
+    hbt.close()
+    if filled_slice and entry_px > 0.0 and end_mid > 0.0:
+        markouts_bps.append(((end_mid / entry_px) - 1.0) * 10_000.0)
+    total_events += int(n_ev)
+    slices_ok += 1
+    symbols_replayed.append(f"{sl['symbol']}@{sl['date']}")
+
+fill_rate = (passive_fills / passive_orders) if passive_orders > 0 else 0.0
+mean_markout = float(np.mean(markouts_bps)) if markouts_bps else 0.0
+ver = getattr(hftbacktest, "__version__", "2.4.2")
+print("__SOTA_JSON__:" + json.dumps({
+    "executed": slices_ok > 0 and total_events > 0,
+    "synthetic": False,
+    "fallback_used": False,
+    "engine_kind": "RUST_HFTBACKTEST_HASHMAP_DEPTH",
+    "queue_model": "RiskAdverseQueueModel",
+    "version": str(ver),
+    "slices_replayed": int(slices_ok),
+    "events_replayed": int(total_events),
+    "passive_orders_submitted": int(passive_orders),
+    "passive_fills": int(passive_fills),
+    "passive_fill_rate_pct": round(fill_rate * 100.0, 2),
+    "mean_fill_markout_bps": round(mean_markout, 4),
+    "post_wall_n": 0,
+    "symbols_replayed": symbols_replayed,
+    "summary": (
+        f"Rust hftbacktest v{ver} HashMapMarketDepthBacktest + RiskAdverseQueueModel: "
+        f"{slices_ok} real pre-wall L1 slices, {total_events:,} depth+trade events, "
+        f"{passive_fills}/{passive_orders} passive maker fills ({fill_rate*100.0:.1f}%), "
+        f"mean markout {mean_markout:+.2f} bps"
+    ),
+}, allow_nan=False))
+"""
+    wsl_py = "/home/agent/sota-workstation/sota-compounding-lab/.venv/bin/python"
+    if sys.platform == "win32":
+        cmd = ["wsl", "-d", "Noesis-Carbon", "--", wsl_py, "-c", wsl_code]
+    else:
+        cmd = [wsl_py, "-c", wsl_code]
+    proc = subprocess.run(
+        cmd,
+        input=json.dumps({"slices": paired_slices, "wall_iso": STUDY_WALL_ISO}, allow_nan=False),
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()[-500:]
+        return {"executed": False, "error": f"rc={proc.returncode}: {err}"}
+    idx = proc.stdout.rfind(_JSON_MARKER)
+    if idx < 0:
+        return {"executed": False, "error": f"missing_json_marker: {proc.stdout[-240:]!r}"}
+    raw_tail = proc.stdout[idx + len(_JSON_MARKER) :].strip().splitlines()[0].strip()
+    out = json.loads(raw_tail)
+    return out if isinstance(out, dict) else {"executed": False, "error": "non_dict_hft_output"}
+
+
+def _run_rtx4090_gpu_cuda_bootstrap(
+    gpu_sidecar_url: str,
+    daily_returns: list[float],
+) -> dict[str, Any]:
+    """Execute strict RTX 4090 CUDA 10,000-rep block bootstrap via `:8794` (`require_gpu=True`, zero CPU fallback)."""
+    body = json.dumps(
+        {
+            "returns": daily_returns,
+            "n_boot": 10_000,
+            "block_len": 5,
+            "annualization": 252.0,
+            "seed": 42,
+            "require_gpu": True,
+        },
+        allow_nan=False,
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        f"{gpu_sidecar_url.rstrip('/')}/api/gpu/bootstrap_cpcv",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15.0) as resp:
+        res = json.loads(resp.read().decode("utf-8"))
+    dev = str(res.get("device") or "")
+    if not res.get("ok") or not dev.startswith("cuda"):
+        raise RuntimeError(f"FAIL_CLOSED_GPU_REQUIRED: sidecar returned device={dev!r} (no CPU fallback allowed)")
+    with urllib.request.urlopen(f"{gpu_sidecar_url.rstrip('/')}/api/gpu/health", timeout=5.0) as h_resp:
+        health = json.loads(h_resp.read().decode("utf-8"))
+    gpu_name = str(health.get("gpu_name") or "RTX 4090 CUDA")
+    return {
+        "executed": True,
+        "synthetic": False,
+        "fallback_used": False,
+        "version": f"torch-cuda / {gpu_name}",
+        "device": dev,
+        "gpu_name": gpu_name,
+        "n_obs": int(res["n_obs"]),
+        "n_boot": int(res["n_boot"]),
+        "sharpe_median": float(res["sharpe_median"]),
+        "sharpe_ci95": list(res["sharpe_ci95"]),
+        "prob_sharpe_gt_zero": float(res["prob_sharpe_gt_zero"]),
+        "gpu_compute_ms": float(res["gpu_compute_ms"]),
+        "summary": (
+            f"{gpu_name} ({dev}) {int(res['n_boot']):,}-rep circular block bootstrap in "
+            f"{float(res['gpu_compute_ms']):.2f} ms: median SR={float(res['sharpe_median']):+.3f}, "
+            f"CI95={res['sharpe_ci95']}, P(SR>0)={float(res['prob_sharpe_gt_zero']):.3f}"
+        ),
+    }
 
 
 def _run_econometric_battery_via_ranker_venv(
@@ -659,6 +1113,7 @@ def _load_prewall_194_profiles() -> dict[str, dict[str, Any]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Execute SOTA Upstream-Library E2E Sim & Live Per-Symbol Routing.")
     parser.add_argument("--ranker-url", default="http://127.0.0.1:8787")
+    parser.add_argument("--gpu-sidecar-url", default="http://127.0.0.1:8794")
     parser.add_argument("--venue-lane", default=":8787")
     parser.add_argument(
         "--out-json",
@@ -677,41 +1132,48 @@ def main() -> int:
     upstream_runs: dict[str, Any] = {}
     by_symbol: dict[str, list[dict[str, Any]]] = {}
 
-    if ranker_py is not None:
-        lake_res = _extract_prewall_daily_bars_via_ranker_venv(ranker_py, market_root, CORE_E2E_SYMBOLS)
-        if lake_res.get("executed"):
-            by_symbol = lake_res["by_symbol"]
-            upstream_runs["polars_duckdb_pandera_xnys"] = {
-                "executed": True,
-                "version": (
-                    f"polars {lake_res['polars_version']} / duckdb {lake_res['duckdb_version']} / "
-                    f"pandera {lake_res['pandera_version']} / xcals {lake_res['exchange_calendars_version']}"
-                ),
-                "sessions_n": lake_res["sessions_n"],
-                "date_range": lake_res["date_range"],
-                "non_xnys_n": lake_res["non_xnys_n"],
-                "post_wall_n": lake_res["post_wall_n"],
-                "total_1m_bars_aggregated": lake_res["total_1m_bars_aggregated"],
-                "summary": (
-                    f"{lake_res['sessions_n']} official XNYS pre-wall sessions ({lake_res['date_range'][0]}.."
-                    f"{lake_res['date_range'][1]}), {lake_res['total_1m_bars_aggregated']:,} 1m bars, "
-                    f"0 post-wall bytes, Pandera Float64 PASS"
-                ),
-            }
-        else:
-            upstream_runs["polars_duckdb_pandera_xnys"] = {
-                "executed": False,
-                "version": "unavailable",
-                "summary": str(lake_res.get("error", "failed")),
-            }
+    if ranker_py is None or meridian_py is None:
+        raise RuntimeError(
+            f"FAIL_CLOSED_MISSING_VENV: ranker_py={ranker_py}, meridian_py={meridian_py} (zero silent fallback)"
+        )
 
-    # Run deterministic hftbacktest-parity queue simulation across real pre-wall split-adjusted OHLC bars
+    lake_res = _extract_prewall_daily_bars_via_ranker_venv(ranker_py, market_root, CORE_E2E_SYMBOLS)
+    if not lake_res.get("executed"):
+        raise RuntimeError(f"FAIL_CLOSED_PREWALL_LAKE_ERROR: {lake_res.get('error')}")
+    by_symbol = lake_res["by_symbol"]
+    upstream_runs["polars_duckdb_pandera_xnys"] = {
+        "executed": True,
+        "synthetic": False,
+        "fallback_used": False,
+        "version": (
+            f"polars {lake_res['polars_version']} / duckdb {lake_res['duckdb_version']} / "
+            f"pandera {lake_res['pandera_version']} / xcals {lake_res['exchange_calendars_version']}"
+        ),
+        "sessions_n": lake_res["sessions_n"],
+        "date_range": lake_res["date_range"],
+        "non_xnys_n": lake_res["non_xnys_n"],
+        "post_wall_n": lake_res["post_wall_n"],
+        "total_1m_bars_aggregated": lake_res["total_1m_bars_aggregated"],
+        "summary": (
+            f"{lake_res['sessions_n']} official XNYS pre-wall sessions ({lake_res['date_range'][0]}.."
+            f"{lake_res['date_range'][1]}), {lake_res['total_1m_bars_aggregated']:,} 1m bars, "
+            f"0 post-wall bytes, Pandera Float64 PASS"
+        ),
+    }
+
+    # Execute authentic Rust hftbacktest v2.4.2 HashMapMarketDepthBacktest + RiskAdverseQueueModel
+    # on real pre-wall paired L1 quote+trade Parquet slices (ZERO pure-Python fallback!)
+    hft_res = _run_real_hftbacktest_l1_via_noesis_carbon(market_root)
+    if not hft_res.get("executed"):
+        raise RuntimeError(f"FAIL_CLOSED_HFTBACKTEST_FULL_RES_ERROR: {hft_res.get('error')}")
+    upstream_runs["hftbacktest"] = hft_res
+
+    # Compute per-symbol conservative stop-first pre-wall empirical bounds for live EB routing metadata
     sim_rows: list[dict[str, Any]] = []
     prewall_emp_by_sym: dict[str, tuple[int, float]] = {}
     for sym, bars in sorted(by_symbol.items()):
         if len(bars) < 60:
             continue
-        # Connors IBS < 0.20 (DAILY_SWING)
         ibs_entries: list[int] = []
         bo_entries: list[int] = []
         for idx in range(21, len(bars) - 2):
@@ -750,43 +1212,30 @@ def main() -> int:
         best_r = r_ibs if r_ibs["mean_2x_bps"] >= r_vcp["mean_2x_bps"] else r_vcp
         prewall_emp_by_sym[sym] = (int(best_r["events_n"]), float(best_r["mean_2x_bps"]))
 
-    upstream_runs["hftbacktest_queue_parity_ref"] = {
-        "executed": len(sim_rows) > 0,
-        "version": "STOP_CHECK_BEFORE_MFE_UPDATE + Almgren-Chriss 1x/2x",
-        "rows_n": len(sim_rows),
-        "summary": f"{len(sim_rows)} pre-wall symbol x strategy queue-parity sims (0 intrabar lookahead)",
-    }
-
-    # Execute authentic VectorBT v1.2.0 + NautilusTrader v2.0.0rc9 via meridian/.venv
-    vbt_nt_res: dict[str, Any] = {}
-    if meridian_py is not None and by_symbol:
-        vbt_nt_res = _run_vectorbt_and_nautilus_via_meridian_venv(meridian_py, by_symbol)
-        if vbt_nt_res.get("executed"):
-            upstream_runs["vectorbt"] = vbt_nt_res["vectorbt"]
-            upstream_runs["nautilus_trader"] = vbt_nt_res["nautilus_trader"]
-        else:
-            upstream_runs["vectorbt_nautilus"] = {
-                "executed": False,
-                "version": "meridian_venv_err",
-                "summary": str(vbt_nt_res.get("error", "failed")),
-            }
+    # Execute authentic VectorBT v1.2.0 + FULL-RESOLUTION NautilusTrader v2.0.0rc9 via meridian/.venv
+    vbt_nt_res = _run_vectorbt_and_nautilus_via_meridian_venv(meridian_py, by_symbol)
+    if not vbt_nt_res.get("executed"):
+        raise RuntimeError(f"FAIL_CLOSED_VECTORBT_NAUTILUS_ERROR: {vbt_nt_res.get('error')}")
+    upstream_runs["vectorbt"] = vbt_nt_res["vectorbt"]
+    upstream_runs["nautilus_trader"] = vbt_nt_res["nautilus_trader"]
 
     # Execute authentic statsmodels + skfolio + ml4t-diagnostic + bashtage/arch econometric battery
-    if ranker_py is not None and vbt_nt_res.get("executed") and vbt_nt_res.get("daily_panel_2x"):
-        econ_res = _run_econometric_battery_via_ranker_venv(
-            ranker_py,
-            vbt_nt_res["dates"],
-            vbt_nt_res["daily_panel_2x"],
-        )
-        if econ_res.get("executed"):
-            for k in ("statsmodels", "skfolio", "ml4t_diagnostic", "bashtage_arch"):
-                upstream_runs[k] = econ_res[k]
-        else:
-            upstream_runs["econometric_battery"] = {
-                "executed": False,
-                "version": "ranker_venv_err",
-                "summary": str(econ_res.get("error", "failed")),
-            }
+    econ_res = _run_econometric_battery_via_ranker_venv(
+        ranker_py,
+        vbt_nt_res["dates"],
+        vbt_nt_res["daily_panel_2x"],
+    )
+    if not econ_res.get("executed"):
+        raise RuntimeError(f"FAIL_CLOSED_ECONOMETRIC_BATTERY_ERROR: {econ_res.get('error')}")
+    for k in ("statsmodels", "skfolio", "ml4t_diagnostic", "bashtage_arch"):
+        entry = dict(econ_res[k])
+        entry["synthetic"] = False
+        entry["fallback_used"] = False
+        upstream_runs[k] = entry
+
+    # Execute strict RTX 4090 CUDA 10,000-rep block bootstrap via :8794 (ZERO CPU fallback!)
+    bo_returns = vbt_nt_res["daily_panel_2x"]["VBT_20D_BREAKOUT"]
+    upstream_runs["rtx4090_gpu_cuda"] = _run_rtx4090_gpu_cuda_bootstrap(args.gpu_sidecar_url, bo_returns)
 
     # Join live :8787 targets + core liquid basket with pre-wall 194-symbol calibrations & empirical 2x stats
     live_targets, sit_input = _fetch_live_targets_from_ranker(args.ranker_url)
@@ -840,6 +1289,7 @@ def main() -> int:
         prewall_sim_summary=sim_rows,
         cumulative_trials_n=109,
         generated_at_utc=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        strict_full_resolution=True,
     )
 
     out_json = pathlib.Path(args.out_json)
