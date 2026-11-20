@@ -12,6 +12,7 @@ import os
 import pathlib
 import sys
 import time
+from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -23,9 +24,18 @@ from sota_compounding.gpu_accelerator import (
     gpu_score_mover_feature_matrix,
     resolve_fast_prewall_lake_root,
 )
+from sota_compounding.upstream_lib_strategy_e2e import (
+    LiveTargetObservation,
+    MarketSituationInput,
+    apply_regime_conditioned_per_symbol_factors,
+    classify_market_situation,
+)
 
 DEFAULT_SIDECAR_HOST = "127.0.0.1"
 DEFAULT_SIDECAR_PORT = 8794
+_DEFAULT_E2E_MANIFEST_PATH = (
+    pathlib.Path(__file__).resolve().parents[2] / "docs" / "SOTA_UPSTREAM_LIB_E2E_REGIME_PERSYMBOL_MANIFEST.json"
+)
 
 
 def build_sidecar_state(canonical_lake: pathlib.Path) -> dict[str, Any]:
@@ -52,7 +62,7 @@ def make_sidecar_handler(state: dict[str, Any]) -> type[BaseHTTPRequestHandler]:
             del format, args
 
         def _send_json(self, status: int, payload: dict[str, Any]) -> None:
-            raw = json.dumps(payload).encode("utf-8")
+            raw = json.dumps(payload, allow_nan=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(raw)))
@@ -60,7 +70,8 @@ def make_sidecar_handler(state: dict[str, Any]) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(raw)
 
         def do_GET(self) -> None:  # noqa: N802
-            if self.path.rstrip("/") == "/api/gpu/health":
+            route = self.path.split("?", 1)[0].rstrip("/")
+            if route in ("/api/gpu/health", "/health"):
                 hw = state["hardware"]
                 self._send_json(
                     HTTPStatus.OK,
@@ -78,8 +89,30 @@ def make_sidecar_handler(state: dict[str, Any]) -> type[BaseHTTPRequestHandler]:
                         "fast_lake_tier": state.get("fast_lake_tier", "canonical"),
                         "warmup_ms": state.get("warmup_ms", 0.0),
                         "uptime_sec": round(time.monotonic() - float(state["started_mono"]), 2),
+                        "adr0035_routes": [
+                            "/api/upstream_lib_e2e/manifest",
+                            "/api/upstream_lib_e2e/route_targets",
+                        ],
                     },
                 )
+                return
+            if route == "/api/upstream_lib_e2e/manifest":
+                manifest_path = pathlib.Path(state.get("e2e_manifest_path", _DEFAULT_E2E_MANIFEST_PATH))
+                if not manifest_path.is_file():
+                    self._send_json(
+                        HTTPStatus.NOT_FOUND,
+                        {"ok": False, "error": "e2e_manifest_not_generated"},
+                    )
+                    return
+                try:
+                    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                except Exception as exc:
+                    self._send_json(
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                        {"ok": False, "error": f"e2e_manifest_read_error: {exc}"},
+                    )
+                    return
+                self._send_json(HTTPStatus.OK, data)
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
 
@@ -126,6 +159,54 @@ def make_sidecar_handler(state: dict[str, Any]) -> type[BaseHTTPRequestHandler]:
                     self._send_json(HTTPStatus.OK, res)
                 except ValueError as exc:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
+
+            if route == "/api/upstream_lib_e2e/route_targets":
+                raw_sit = body.get("market_situation") or {}
+                raw_targets = body.get("targets")
+                venue_lane = str(body.get("venue_lane", ":8787"))
+                if not isinstance(raw_sit, dict) or not isinstance(raw_targets, list):
+                    self._send_json(
+                        HTTPStatus.BAD_REQUEST,
+                        {"ok": False, "error": "market_situation must be object and targets must be list"},
+                    )
+                    return
+                try:
+                    sit_input = MarketSituationInput(
+                        **{k: v for k, v in raw_sit.items() if k in MarketSituationInput.__dataclass_fields__}
+                    )
+                    assessment = classify_market_situation(sit_input)
+                    obs_list = [
+                        LiveTargetObservation(
+                            **{k: v for k, v in item.items() if k in LiveTargetObservation.__dataclass_fields__}
+                        )
+                        for item in raw_targets
+                        if isinstance(item, dict)
+                    ]
+                    plans = apply_regime_conditioned_per_symbol_factors(
+                        targets=obs_list,
+                        market_situation=assessment,
+                        per_symbol_prewall_profiles=body.get("per_symbol_prewall_profiles")
+                        if isinstance(body.get("per_symbol_prewall_profiles"), dict)
+                        else None,
+                        venue_lane=venue_lane,
+                    )
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "ok": True,
+                            "market_situation": asdict(assessment),
+                            "eligible_n": sum(1 for p in plans if p.eligible),
+                            "plans": [asdict(p) for p in plans],
+                        },
+                    )
+                except ValueError as exc:
+                    status_code = (
+                        HTTPStatus.FORBIDDEN
+                        if "FAIL_CLOSED_LIVE_CAPITAL_REFUSAL" in str(exc)
+                        else HTTPStatus.BAD_REQUEST
+                    )
+                    self._send_json(status_code, {"ok": False, "error": str(exc)})
                 return
 
             self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
