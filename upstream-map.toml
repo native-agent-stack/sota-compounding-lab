@@ -1,0 +1,62 @@
+# Every tracked implementation file in `sota-compounding-lab` maps to a pinned SOTA upstream in UPSTREAM.md
+# (`install`, `integrate`, or `build-on`). Enforced fail-closed by `scripts/merge_gate.py` and `tests/test_upstream_hard_gate.py`.
+
+[shelf_pins]
+"alpaca-py" = "c42add7c0a7026e2ead3ed64e76f4def2b99fda4"
+"alpaca-mcp-server" = "63cc4278d87b31f3ed4efcfaa55624095c6d7be8"
+"nautilus_trader" = "da6b57aefdd62b44f675e434ffcfefca7f4025dd"
+"nautilus-alpaca" = "59685d56631b981018a189b5ced1a7000a50bfbd"
+"polars" = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92"
+"duckdb" = "d54cbbe3df17e8e5ce68312f483b4155836112aa"
+"edgartools" = "574c2bd15f6c629bceef03b6550ea8ac8abf3473"
+"ml4t-diagnostic" = "19e76072e64a18c9ba56130e4a7bcc0bc871f57e"
+"skfolio" = "90e3fb907fab39d244d899f3caf4e9676889309c"
+"hftbacktest" = "5f3ec40b2afb764e0fea112f941ed85523ef4e88"
+"ib_async" = "ab629f34c1823ea4c1542f32f07377208a86bdfd"
+"perspective" = "0264ec13cd28ef4a2a136c8ef021c3c112bc8990"
+"lightweight-charts" = "c29c51e1e5bc61981da5832c97797cb8283d120f"
+"quantstats" = "d1a214fb906e76f974f45cdccf923b601c67a756"
+"vectorbt" = "a52a984b631624bb9daf41cb19f532fe559cf0ef"
+"pandera" = "02b375ab43f39f8c5c5108695c1791fa04f99a26"
+"exchange_calendars" = "dbe38b1f6887434bbdd1a7d2df6ff8f1742a048a"
+"statsmodels" = "278ff9950636cdd4939b4055e339a8e681d79cab"
+
+[areas]
+"src/sota_compounding/__init__.py" = { upstream = "ml4t-diagnostic", how = "integrate", feature = "package export namespace for 5-stage SOTA compounding lab", why = "isolate zero-dependency governance contracts from heavy research runners" }
+"src/sota_compounding/lifecycle.py" = { upstream = "ml4t-diagnostic", how = "build-on", feature = "5-stage Sim->Backtest->Paper->FineTune->Broker lifecycle, HLZ t*(N), DSR, CPCV, and ADR-0022 <=2.00% stop bounds", why = "enforce identical fail-closed promotion and study-wall invariants across all pre-wall trials" }
+"src/sota_compounding/advanced_merit_sim_convergence.py" = { upstream = "arch", how = "build-on", feature = "Hansen (2005) SPA, HLN (2011) MCS, Conformal PID stops (MAPIE/conformalforecast), Fixed-Share Hedge & Hierarchical EB", why = "provide deterministic parity reference and merit convergence manifest alongside native arch/MAPIE runs" }
+"src/sota_compounding/backtest_playback_manifest.py" = { upstream = "arch", how = "build-on", feature = "Multi-regime pre-wall playback horizons W1..W5, ADIA Lab #19 MinTRL, and 14-point low-quality practice purge", why = "block toy horizons, survivorship bias, TP caps, and banned libraries before trial execution" }
+"src/sota_compounding/bitemporal_sidecar.py" = { upstream = "hftbacktest", how = "build-on", feature = "Bitemporal ts_event_ns <= ts_recv_ns <= decision_ns pre-wall partition contract", why = "guarantee zero lookahead across SIP/BOATS tick and bar partitions" }
+"src/sota_compounding/collar_recalibration.py" = { upstream = "hftbacktest", how = "build-on", feature = "Closed-loop TCA collar recalibration and temporal firewall", why = "keep passive bid-survival collars bounded by realized queue slippage without peeking post-wall" }
+"src/sota_compounding/converged_strategy_factory.py" = { upstream = "qlib", how = "build-on", feature = "Whole-market converged strategy factory, quarantine registry, and quality-first SOTA adapter catalog", why = "coordinate pre-wall strategy templates and block retired trap patterns" }
+"src/sota_compounding/gpu_accelerator.py" = { upstream = "cudf", how = "build-on", feature = "Noesis-Carbon RTX 4090 CUDA / PyTorch vectorized CPCV and cross-sectional scoring accelerator", why = "accelerate multi-hundred-session factor sweeps on local GPU without CPU bottlenecks" }
+"src/sota_compounding/gpu_scoring_sidecar.py" = { upstream = "cudf", how = "build-on", feature = "Loopback :8794 RTX 4090 GPU scoring sidecar HTTP server", why = "serve fail-open millisecond cross-sectional scoring to Win32 trading lanes" }
+"src/sota_compounding/prewall_h099_enrichment.py" = { upstream = "edgartools", how = "build-on", feature = "DF10 own-history ToD baseline, DF6 XBRL float, and SEC acceptanceDateTime pre-wall lake enrichment", why = "ensure strictly point-in-time catalyst and float enrichment <= 2026-10-15" }
+"src/sota_compounding/ranking_and_datafeeds.py" = { upstream = "exchange_calendars", how = "build-on", feature = "Canonical 7-feed and 9-feed PIT datafeed contracts (DF1..DF9) and XNYS ToD RVOL buckets", why = "prevent U-shaped open/close volume bias and enforce FINRA/SEC dissemination lags" }
+"src/sota_compounding/sim_to_paper_to_live_merit_manifest.py" = { upstream = "quantstats", how = "build-on", feature = "Unified dimensionless Sim -> Paper -> Live merit manifest with SHA-256 sealing", why = "reconcile pre-wall simulation against realized paper broker telemetry without leaking account IDs" }
+"src/sota_compounding/strategy_contract_v2.py" = { upstream = "nautilus_trader", how = "build-on", feature = "Strategy Contract v2 enforcing ADR-0022 <=2.00% stops, TP OFF, and bitemporal PIT inputs", why = "guarantee execution-contract parity between pre-wall simulations and live paper engines" }
+"src/sota_compounding/strategy_template.py" = { upstream = "nautilus_trader", how = "build-on", feature = "Research-converged strategy templates aligned with 7-feed PIT routing and queue parity", why = "prevent parameter drift between lab templates and NautilusTrader/Alpaca paper engines" }
+"src/sota_compounding/symbol_ranking_v310.py" = { upstream = "polars", how = "build-on", feature = "12-feed DF1..DF12 bitemporal symbol ranking foundation and 8-stage convergence gate", why = "enforce own-history abnormal-rate ranking and post-wall EB separation" }
+"src/sota_compounding/tca_queue_parity.py" = { upstream = "nautilus_trader", how = "build-on", feature = "Live paper TCA vs NautilusTrader/hftbacktest passive queue-fill parity reconciler", why = "measure adverse selection and fill-rate drift between simulation and real paper fills" }
+"src/sota_compounding/upstream_lib_strategy_e2e.py" = { upstream = "nautilus_trader", how = "build-on", feature = "Multi-library upstream strategy E2E simulator (NautilusTrader, VectorBT, hftbacktest, skfolio, ml4t-diagnostic, statsmodels, arch, polars/pandera) and regime-conditioned hierarchical EB factor engine", why = "execute strategy simulations directly on pinned SOTA upstream libraries and feed :8794 live routes" }
+"scripts/architecture_catalog.py" = { upstream = "orca", how = "build-on", feature = "Zero-drift MADR 4.0 docs/adr/CATALOG.md generator and verifier", why = "maintain synchronized ADR catalogs on every commit" }
+"scripts/benchmark_noesis_rtx4090_sota.py" = { upstream = "cudf", how = "integrate", feature = "RTX 4090 CUDA vs CPU matrix sweep benchmark", why = "verify GPU acceleration speedups on Noesis-Carbon" }
+"scripts/generate_sim_paper_live_merit_manifest.py" = { upstream = "quantstats", how = "build-on", feature = "CLI generator for sealed Sim->Paper->Live merit manifest", why = "emit reproducible SHA-256 merit artifacts from pre-wall and paper receipts" }
+"scripts/materialize_prewall_df10_df6.py" = { upstream = "polars", how = "integrate", feature = "Pre-wall DF10 20d ToD baseline and DF6 XBRL float Parquet materializer", why = "precompute strictly causal <= 2026-10-15 lookup tables on Disk Z:/ext4" }
+"scripts/merge_gate.py" = { upstream = "nautilus_trader", how = "build-on", feature = "Fail-closed upstream-map.toml, UPSTREAM.md, 18-pin shelf, ADR evidence, and zero-leak merge gate", why = "block unmapped files, bespoke engine placeholders, banned libs, or secret leaks before merge" }
+"scripts/org_visibility_doctor.py" = { upstream = "orca", how = "build-on", feature = "Public open-core vs private vault zero-leak visibility doctor", why = "guarantee zero proprietary secrets, home paths, or account IDs enter public open-core repos" }
+"scripts/run_h105_sec_8k_episodic_pivot.py" = { upstream = "duckdb", how = "integrate", feature = "Pre-wall SEC 8-K episodic pivot trial runner using duckdb, skfolio CombinatorialPurgedCV, and torch", why = "evaluate strictly PIT SEC catalyst breakouts <= 2026-10-15" }
+"scripts/run_h106_df8_short_crowding_xsec.py" = { upstream = "duckdb", how = "integrate", feature = "Pre-wall DF8 short-crowding cross-sectional runner using duckdb, statsmodels HAC, and skfolio CPCV", why = "evaluate FINRA Rule 4560 T+8 settled short-interest crowding signals" }
+"scripts/run_h107_sector_neutral_liquid_multifeed_rtx4090.py" = { upstream = "duckdb", how = "integrate", feature = "RTX 4090 sector-neutral multi-feed trial runner using duckdb, statsmodels, skfolio, and torch", why = "test liquid sector-neutral multi-feed alpha on GPU with CPCV/HLZ gates" }
+"scripts/run_h109_trial105_boats_bifurcation.py" = { upstream = "skfolio", how = "integrate", feature = "Trial #105 H109 BOATS overnight bifurcation runner using duckdb, statsmodels, skfolio CPCV, and ml4t-diagnostic DSR", why = "falsify BOATS retail-crowding opening fade vs 8-K continuation <= 2026-10-15" }
+"scripts/run_h110_trial107_residual_leadlag_and_letf_closeflow.py" = { upstream = "skfolio", how = "integrate", feature = "Trial #107 H110 residual lead-lag and LETF closeflow runner using duckdb, statsmodels, skfolio, and ml4t-diagnostic", why = "falsify cross-asset residual lead-lag and 15:30 ET leveraged-ETF rebalance flows" }
+"scripts/run_h112_trial106_424b5_dilution_short.py" = { upstream = "edgartools", how = "integrate", feature = "Trial #106 H112 SEC 424B5 dilution short runner using duckdb, statsmodels, skfolio, and ml4t-diagnostic", why = "falsify point-in-time shelf-offering dilution shorts <= 2026-10-15" }
+"scripts/run_h113_trial108_prefill_confirm_per_symbol_min_trail.py" = { upstream = "skfolio", how = "integrate", feature = "Trial #108 H113 pre-fill 0bps cancel and per-symbol min-trail runner using duckdb, statsmodels, skfolio, and ml4t-diagnostic", why = "test pre-fill cancellation and causal per-symbol noise-floor trails on 700 pre-wall sessions" }
+"scripts/run_h114_trial109_multifeed_concentrated_longshort_min_trail.py" = { upstream = "duckdb", how = "integrate", feature = "Trial #109 H114 multi-feed DF1..DF9 concentrated Long/Short runner using duckdb and pre-wall SIP lake", why = "measure multi-feed Long/Short screening x pre-fill cancel across 700 pre-wall sessions" }
+"scripts/run_h115_trial110_final_4catalyst_concentrated_1000rpm.py" = { upstream = "duckdb", how = "integrate", feature = "Trial #110 H115 4-catalyst concentrated 1,000 RPM passive-maker vs taker audit on 700d pre-wall lake", why = "quantify concentrated 4-catalyst passive-maker vs taker expectancy under 1x/2x cost stress" }
+"scripts/run_h116_trial111_sota_norm_disruption_and_reversal_sar.py" = { upstream = "skfolio", how = "integrate", feature = "Trial #111 H116 7-library pre-wall per-symbol norm disruption early entry & reversal SAR ablation using exchange_calendars, duckdb, polars, pandera, statsmodels, skfolio, ml4t-diagnostic, and arch", why = "falsify whole-market per-symbol norm disruption early entry and reversal SAR across 700 pre-wall sessions with HLZ/DSR/CPCV/SPA" }
+"scripts/run_optb_prewall_factory.py" = { upstream = "hftbacktest", how = "integrate", feature = "Pre-wall Option-B factory integrating hftbacktest RiskAdverseQueueModel, vectorbt, duckdb, statsmodels, skfolio, and ml4t-diagnostic", why = "execute multi-library queue-parity and vectorized parameter sweeps strictly <= 2026-10-15" }
+"scripts/run_upstream_lib_e2e_and_live_routing.py" = { upstream = "nautilus_trader", how = "integrate", feature = "ADR-0035 multi-library upstream strategy E2E runner and :8794 sidecar route publisher", why = "run pre-wall upstream-library strategy evaluations and emit SHA-256 sealed manifests" }
+"scripts/run_v3110_alpha_factory_s1_s2.py" = { upstream = "hftbacktest", how = "integrate", feature = "Stage-1/2 alpha factory running hftbacktest RiskAdverseQueueModel, exchange_calendars XNYS, duckdb, and skfolio", why = "enforce queue-level fill realism and XNYS session boundaries in S1/S2" }
+"scripts/start_noesis_gpu_sidecar.sh" = { upstream = "cudf", how = "integrate", feature = "WSL2 Noesis-Carbon RTX 4090 GPU sidecar launcher", why = "boot loopback :8794 CUDA scoring service inside durable ext4 venv" }
+"scripts/sync_prewall_lake_fast_tier.py" = { upstream = "polars", how = "integrate", feature = "Disk Z: to WSL2 native ext4 fast-tier pre-wall lake synchronizer", why = "eliminate slow 9P reads by keeping pre-wall Parquet on durable ext4" }
