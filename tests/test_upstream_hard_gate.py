@@ -20,8 +20,7 @@ def test_rejects_unmapped_or_placeholder_engine_entry(tmp_path: pathlib.Path) ->
         encoding="utf-8",
     )
     (tmp_path / "upstream-map.toml").write_text(
-        "[areas]\n"
-        '"src/bad.py" = { upstream = "cpython-stdlib", how = "build-on", feature = "f", why = "w" }\n',
+        '[areas]\n"src/bad.py" = { upstream = "cpython-stdlib", how = "build-on", feature = "f", why = "w" }\n',
         encoding="utf-8",
     )
     (tmp_path / "src").mkdir()
