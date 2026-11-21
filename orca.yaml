@@ -12,3 +12,5 @@ defaultTabs:
     command: uv run python scripts/org_visibility_doctor.py --offline
   - title: Pytest
     command: uv run pytest -q
+  - title: Tier-0 Merge Gate
+    command: uv run python scripts/merge_gate.py
